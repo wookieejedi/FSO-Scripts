@@ -1,0 +1,727 @@
+#Conditional Hooks
+
+$Application: FS2_Open
+
+$On Game Init: [
+	
+	--Version 2.7, released on April 22, 2019 by wookieejedi
+	CustomWingGauge = {} --makes a global variable! This is the only global variable this script creates. 
+	
+	---------------------------------
+	--USER OPTIONS---
+	-----------------
+	--To turn off the custom gauge set: 
+	--CustomWingGauge.isactive = false
+	CustomWingGauge.isactive = true
+	
+	-----------------
+	--To leave the default wingmen gauge on set: 
+	--CustomWingGauge.is_defaultgauge_disabled = false
+	CustomWingGauge.is_defaultgauge_disabled = true
+	
+	-----------------
+	--To use a compact, grid style for the gauge set: 
+	--CustomWingGauge.style = "grid"
+	--if using 'grid', it is recommended to set the position, CustomWingGauge.origin = {x=0.88, y=0.3}
+	--if using 'default', it is recommended to set the position, CustomWingGauge.origin = {x=0.935, y=0.2}
+	CustomWingGauge.style = "grid"
+	
+	-----------------
+	--To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl: 
+	--Note this custom gauge does not scale in size
+	CustomWingGauge.origin = {x=0.88, y=0.3}
+	CustomWingGauge.offset = {x=0, y=0}
+	
+	-----------------	
+	--To set custom fonts for the gauge to use change the values of 'default' and 'low_resolution':
+	--Each value can be an integer index or font file name listed in fonts.tbl.
+	--If the font specific does not exist, the gauge will use the first font listed in fonts.tbl.
+	CustomWingGauge.fonts = {default=4, low_resolution=6}
+	
+	-----------------
+	--To use gray-scale dots instead of red and green wingmen dots set: 
+	--CustomWingGauge.isgrayscaled = true
+	CustomWingGauge.isgrayscaled = false
+	
+	-----------------
+	--To use the same dot icon for fighters and bombers set: 
+	--CustomWingGauge.isbombdifferent = false
+	CustomWingGauge.isbombdifferent = true
+	
+	-----------------
+	--To use gauge with RTT display set: 
+	--CustomWingGauge.RTT = {use=true}
+	--If use = true, then the script will use RTT in internal view then switch to screen render for external view. 
+	--Also, for RTT to work be sure to make a '+Scripted Gauge:' entry in hud_gauges.tbl. 
+	--Note 'gauge_name' should equal the 'Name' of the '+Scripted Gauge' that was created in the 'hud_gauges.tbl'.
+	CustomWingGauge.RTT = {use=true, gauge_name="Wingmen_Custom_RTT"}
+	
+	-----------------
+	--End of USER OPTIONS
+	---------------------------------	
+		
+		
+	CustomWingGauge.winglist = {} --will save as table of wingnames as strings
+	CustomWingGauge.basecolor = {35,35,35,255} --dark gray as default
+	
+	function CustomWingGauge:Draw(mode, isinmission, gauge) --Function makes a wingmen gauge with colors showing wingmen health and full wingnames. The input 'mode' can be start or onframe. This function uses 1 global variable, CustomWingGauge.
+
+		mode = mode or "start"
+		isinmission = isinmission or false
+		
+		--gauge still tracks data if this is false, just no drawing
+		local isplayergaugeon = false
+
+		local r, g, b, int = self.basecolor[1], self.basecolor[2], self.basecolor[3], self.basecolor[4]
+		
+		if self.isactive and int > 0 and not hu.HUDDisabledExceptMessages and isinmission and not self.isplayeralone then 
+			isplayergaugeon = true
+		end 
+
+		local idot = self.basecolor[4]	--((255-self.basecolor[4])*0.8)
+		local green = {0,120,0,idot}
+		local orange = {212,91,18,idot}
+		local red = {126,6,6,idot}
+		--local grey = {105, 105, 105, idot}
+		--local dgray = {35,35,35,idot}
+		if self.isgrayscaled then
+			green = {200,200,200,255} --white-ish gray
+			red = {35,35,35,255}
+		end
+		--size of wingmen dots
+		local dsize = 5
+		--font size
+		local fonttype = "default"
+		local islowres = false 
+		if gr.getScreenWidth() < 1024 or gr.getScreenHeight() < 768 then 
+			fonttype = "low_resolution"
+			dsize = 3
+			islowres = true
+		end 
+		local font = self.fonts[fonttype]		
+		if gr.Fonts[font] ~= nil then --if this is a valid font 
+			gr.CurrentFont = gr.Fonts[font] --1 or 4 is medium, 2 or 5 is large, 3 or 6 is small
+		else --if not a valid font we default to the first font specified in fonts.tbl 
+			gr.CurrentFont = gr.Fonts[1]
+			dsize = 5
+			if islowres and gr.Fonts[3] ~= nil then
+				gr.CurrentFont = gr.Fonts[3]
+			end 
+		end
+		--ba.print("Selected_font_is: "..font.." ...\n")
+		local slineh = gr.CurrentFont.Height
+		
+		if not (self.style == "default" or self.style == "grid") then
+			self.style = "default"
+		end 
+		local style = self.style
+		local dspace = dsize*2.2 -- + round(dsize*1.5)
+		local buf = 4 --buffer pixels around rectangle
+		if islowres then 
+			buf = 2
+		end 		
+		local gaugename = "Wingmen"
+		local gnamewidth = gr.getStringWidth(gaugename)+buf*3
+		local configs = {
+			default ={
+				dotoffsets = {{0,0},{-dspace,dspace},{dspace,dspace},{0,dspace*2},{-dspace*2,dspace*2},{dspace*2,dspace*2}},
+				namestart_y = dspace*3.2,
+				mindwidth = dsize*3 + dspace*4 + buf,
+				extrabuf_x = buf*3,
+				extra_y = 1.3 * slineh + buf,
+				canvas_size = {x=gnamewidth+buf*2, y=8*(dspace*3.2+(1.3 * slineh + buf)+buf*2) }
+			},
+			grid={
+				dotoffsets = {{0,0},{1*(dspace+dsize),0},{2*(dspace+dsize),0},{3*(dspace+dsize),0},{4*(dspace+dsize),0},{5*(dspace+dsize),0}},
+				namestart_y = 0,
+				mindwidth = gnamewidth + 1*(dspace+dsize) + 2*buf,
+				extrabuf_x = buf*3 + 6*(dspace+dsize),
+				extra_y = slineh + buf/1.7,
+				canvas_size = {x=(gnamewidth+ 5*(dspace+dsize) + buf), y=(7*(slineh + buf/1.7))}
+			}
+		}
+		local dotlocs = configs[style].dotoffsets
+		local alldheight = configs[style].namestart_y
+		local wnameoff = configs[style].extra_y
+		--ba.print("Canvas_Size x, y: "..configs[style].canvas_size.x..", "..configs[style].canvas_size.y.."...\n")
+		
+		local function firstToUpper(str)
+			local ST = ""
+			if str ~= nil then 
+				ST = str:gsub("^%l", string.upper)
+			end 
+			return ST
+		end
+
+		local function ColorMixer(colorA,colorB,percentage)
+
+			--validity checks
+			local lb = {0,0,0,0}
+			if colorA == nil or colorB == nil then return lb end
+			if #colorA ~= 4 or #colorB ~= 4 then return lb end
+			percentage = percentage or 1
+			if percentage > 1 then
+				percentage = 1
+			end
+			if percentage < 0 then
+				percentage = 0
+			end
+
+			--mix colors
+			for i=1,3 do
+				local step = math.abs(colorA[i] - colorB[i])
+				local cstart = colorA[i]
+				local cend = colorB[i]
+				local perstep = 1 - percentage
+				if cstart <= cend then
+					lb[i] = cstart + perstep*step
+				else
+					lb[i] = cstart - perstep*step
+				end
+			end
+
+			lb[4] = colorA[4]
+
+			return lb
+
+		end
+
+		local function GetWingList() --reads in the current mission file and extracts and saves the squadron wingnames
+			--split squadron wing name string into each wing and save to global winglist table
+			local function WingStr_toTable(str)
+				if str == nil then return {} end
+				local q = tostring[["]]
+				local q1 = string.find(str,q)
+				local start = string.sub(str,q1,#str)
+				local winglist = {}
+				local scom = ""
+
+				for i=1,#start do
+					local ss = string.sub(start,i,i)
+					local ss_1 = string.sub(start,i,i+1)
+					local p1_ss_1 = string.sub(start,i-1,i+1)
+
+					if ss ~= q and ss_1 ~= q.." " and p1_ss_1 ~= q.." "..q then
+						scom = scom .. ss
+					end
+
+					if ss_1 == q.." " then
+						table.insert(winglist,scom)
+						scom = ""
+					end
+
+				end
+				if #winglist > 0 then
+					return winglist
+				else
+					return {}
+				end
+			end
+
+		--reads in the current mission file and finds the squadron names, saves as string
+			local mission_name = mn.getMissionFilename()
+			if string.find(mission_name,".fs2") == nil then
+				mission_name = mission_name .. ".fs2"
+			end
+			local missionfile = cf.openFile(mission_name, "r", "data/missions")
+			local isfound = false
+			local wingliststring = ""
+			local readline
+			if missionfile:isValid() then
+				repeat
+					readline = missionfile:read("*l")
+					if readline ~= nil then
+						if string.find(readline, "Squadron wing names") ~= nil then
+							wingliststring = readline
+							isfound = true
+						end
+					end
+				until readline == nil or isfound == true
+			end
+			missionfile:close()
+			if wingliststring ~= "" and wingliststring ~= nil then
+				ba.print("Successfully found Squadron Wing Names...\n")
+				return WingStr_toTable(wingliststring)
+			else
+				ba.print("Did not find Squadron Wing Names, assuming default names...\n")
+				return {"Alpha","Beta","Gamma","Delta","Epsilon"}
+			end
+
+		end
+
+		local function SubfromHash(str) --gets string sub before any # sign
+			if str == nil then return "" end
+
+			if string.find(str,"#") then
+				local loc = string.find(str,"#")-1
+				local sub = string.sub(str,1,loc)
+				if sub == nil then sub = "" end
+				return sub
+			else
+				return str
+			end
+		end
+
+		local function dr(functype, arglist)
+			--string
+			if functype == "drawString" then
+				local s = arglist[1] or ""
+				local x = arglist[2] or 0
+				local y = arglist[3] or 0 
+				if gauge ~= nil then 
+					gauge:drawString(s, x, y)
+				else
+					gr.drawString(s, x, y)
+				end
+			end 
+			--line
+			if functype == "drawLine" then
+				local x1 = arglist[1] or 0
+				local y1 = arglist[2] or 0
+				local x2 = arglist[3] or 0
+				local y2 = arglist[4] or 0
+				if gauge ~= nil then 
+					gauge:drawLine(x1, y1, x2, y2)
+				else
+					gr.drawLine(x1, y1, x2, y2)
+				end
+			end 
+			--rectangle
+			if functype == "drawRectangle" then
+				local x1 = arglist[1] or 0
+				local y1 = arglist[2] or 0
+				local x2 = arglist[3] or 0
+				local y2 = arglist[4] or 0
+				local filled = arglist[5]
+				if filled == nil then filled = true end
+				if gauge ~= nil then 
+					gauge:drawRectangle(x1, y1, x2, y2, filled)
+				else
+					gr.drawRectangle(x1, y1, x2, y2, filled)
+				end			
+			end 
+			--circle
+			if functype == "drawCircle" then
+				local r = arglist[1] or 1
+				local x = arglist[2] or 0 
+				local y = arglist[3] or 0 
+				local filled = arglist[4]
+				if filled == nil then filled = true end
+				if gauge ~= nil then 
+					gauge:drawCircle(r, x, y, filled)
+				else
+					gr.drawCircle(r, x, y, filled)
+				end				
+			end 
+
+		end
+		
+		local function DrawWingSection(wingname, xstart, ystart, xborder) --draws the wing dots and names, returns true if wings drawn
+
+			if wingname == nil then return false end
+			wingname = tostring(wingname)
+			
+			--if we have not added this wing to our tracking table, then add it now
+			if self.winglist[wingname] == nil then
+				--break if wing not even valid when we are trying to get values
+				if not mn.Wings[wingname]:isValid() then
+					return false
+				end
+				--if it is valid then we save the wingmen and values
+				--see how many ships wing has
+				local wing = mn.Wings[wingname]
+				local numships = #wing or 0
+				if numships < 1 then
+					return false
+				end
+				--add it to our table
+				self.winglist[wingname] = {}
+				--add each ship, since they all arrive together this works
+				for i=1,numships do
+					local sname = tostring(wing[i])
+					local ship = mn.Ships[sname]
+					if ship:isValid() then
+						--get class
+						local sclass = tostring(ship.Class.Type.Name)  --ship.Class.TypeString or "fighter"
+						self.winglist[wingname][i] = {name=sname,hp=100,class=sclass} --even if starting ship is not at 100, it gets changed to correct hp in following block
+					end
+				end
+			end
+
+			--wings arrives together but likely will die or depart separately
+			--now just use waved table values, but only if we saved a wing that had ships
+			if self.winglist[wingname] ~= nil and #self.winglist[wingname] > 0 then
+				local wing = self.winglist[wingname]
+				--for each ship, gets ship status, draws dot, we have already checked to make sure there are ships
+				local numships = #wing
+
+				--record the list of currently alive ships (ie alpha 1, or alpha 5, etc) and sub into global tracker table
+				local currentwing = mn.Wings[wingname]
+				local wmax = numships
+				if wmax > 6 then
+					wmax = 6
+				end
+				if currentwing ~= nil and #currentwing > 0 then
+					--if there are more ships present in wing then spots that means a new wing has arrived and ships from previous wing are still around
+					if #currentwing > wmax then
+						wmax = #currentwing
+						if wmax > 6 then
+							wmax = 6
+						end
+					end
+					for i=1,#currentwing do
+						if mn.Wings[wingname][i] ~= nil then
+							local alivesname = tostring(mn.Wings[wingname][i])
+							local ship = mn.Ships[alivesname]
+							--take each ship and place it in wingslots, overlapping is good as long as <=4 or 5 or 6
+							--convert to number within dot range of wing (ie 7->1)
+							--make both uppercase so string match actually works
+							local aliveu, wingu = firstToUpper(alivesname), firstToUpper(wingname)
+							local strtst , endstr = string.find(aliveu,wingu)
+							if endstr == nil then
+								endstr = strtst
+								if endstr == nil then
+									endstr = 1
+								end
+							end
+							local snum = tonumber(string.sub(alivesname,endstr+2,#alivesname))
+							while snum > wmax do
+								snum = snum-wmax
+							end
+							--now replace name
+							--first make it if it doesn't exist
+							if wing[snum] == nil then
+								local sclass = tostring(ship.Class.Type.Name) or "fighter"
+								self.winglist[wingname][snum] = {name=alivesname,hp=100,class=sclass}
+							end
+							--or replace if it does exist
+							if alivesname ~= wing[snum].name then
+								--check if that name exists anywhere in list
+								local ispresent = false
+								for j=1,#wing do
+									if wing[j].name == alivesname then
+										ispresent = true
+									end
+								end
+								--if not anywhere in saved list and the current slot holder is not in the mission then we overwrite
+								if not ispresent and not mn.evaluateSEXP("( is-in-mission !"..wing[snum].name.."! )") then
+									local sclass = tostring(ship.Class.Type.Name) or "fighter"
+									wing[snum].name = alivesname
+									wing[snum].class = sclass
+								end
+							end
+						end
+					end
+				end
+
+				--draw wingname, also accounts for '#' in wingnames
+				if isplayergaugeon then 
+					gr.setColor(r, g, b, int)
+					local shortwname = SubfromHash(wingname)
+					local wnx = xstart-(gr.getStringWidth(shortwname)/2)
+					local sy = ystart+alldheight
+					if style == "grid" then --if in grid we want all wingnames to be left aligned, not centered
+						wnx = xborder+buf*2
+						sy = sy - buf
+					end
+					dr("drawString", {shortwname, wnx, sy})
+				end
+				
+				--if there are ships then we draw their dots
+				for i=1,numships do
+					local ship = wing[i]
+					local sname = ship.name
+		
+					if ship ~= nil and sname ~= nil then
+						local xs, ys = xstart+dotlocs[i][1], ystart+dotlocs[i][2]
+						gr.setLineWidth(2)
+						local iconfull = true
+						local isalive = true
+
+						--draw for in-mission
+						if mn.evaluateSEXP("( is-in-mission !"..sname.."! )") then
+							local mnship = mn.Ships[tostring(sname)]
+							ship.hp = mnship.HitpointsLeft / mnship.HitpointsMax or 1 --remember this is a global
+						end
+						--draw for destroyed delay
+						if mn.evaluateSEXP("( is-destroyed-delay 0 !"..sname.."! )") or ship.hp <=0 then
+							isalive = false
+							iconfull = false
+						end
+						--draw for departed
+						if mn.evaluateSEXP("( has-departed-delay 0 !"..sname.."! )") then
+							iconfull = false
+						end
+
+						--set line and circle color and draws it all
+						if isplayergaugeon then 
+							if isalive then
+								local icl = {green[1], green[2], green[3], idot}
+								local lcut = 0.50
+								local lpercent = 0
+								if ship.hp >= lcut then
+									lpercent = 1-(1-ship.hp)*(1/lcut)
+									icl = ColorMixer(green,orange,lpercent)
+								else
+									lpercent = 1-(lcut-ship.hp)*(1/lcut)
+									icl = ColorMixer(orange,red,lpercent)
+								end
+								--set color					
+								gr.setColor(icl[1], icl[2], icl[3], icl[4])
+							else
+								gr.setColor(red[1],red[2],red[3],red[4])
+							end
+							
+							--draw rest of icon
+							local linew = dsize
+							if self.isbombdifferent and string.find(ship.class,"omb")~=nil then
+								local rsize = dsize*0.80
+								local lx1 = xs-rsize
+								local lx2 = xs+rsize
+								local ly1 = ys-rsize
+								local ly2 = ys+rsize
+								dr("drawRectangle", {lx1, ly1, lx2, ly2, iconfull})
+								linew = rsize
+							else
+								dr("drawCircle", {dsize, xs, ys, iconfull})
+							end
+							if isalive and not iconfull then
+								--draws inner line to show still alive, just departed
+								dr("drawLine", {xs, ys-linew, xs, ys+linew})
+							end
+							gr.setLineWidth(1)
+						end
+					end
+				end
+		
+				return true
+			end
+
+		end
+
+		--first hide retail wingmen gauge, uses GetWingList()
+		if mode == "start" then
+			--get wingmen gauge color
+			--local defaultgag = hu.getHUDGaugeHandle("Wingman status")
+			local indexwinggag = 31
+			self.basecolor[1],self.basecolor[2],self.basecolor[3],self.basecolor[4] = hu.getHUDGaugeColor(indexwinggag)
+			--ba.print("wingmangaugecolorintent is: "..self.basecolor[4].."...\n")
+			if self.basecolor[4] <= 64 then
+				self.basecolor[4] = 0
+			end
+			
+			if isinmission then 
+				self.longestwingname = gr.getStringWidth("Gamma A")
+				if self.is_defaultgauge_disabled then 
+					mn.runSEXP("( hud-set-retail-gauge-active ( false ) !Wingman status! )")
+				end
+				--read mission file to extract squadron wing names to self.winglist
+				--only get wingnames if there are actually wings in mission
+				local wings = mn.Wings
+				if wings ~= nil then 
+					if wings[1]:isValid() then 
+						self.winglist = GetWingList() or {}
+						
+						--get longest wingname from starting wingnames
+						if #self.winglist > 0 then
+							--get longest string in winglist or if using "grid" get longest combo of wingname and dots
+							local minstrwidth = configs[style].mindwidth --this is in pixels, should be about 180 
+							self.maxwidth = math.max(gnamewidth, minstrwidth) --also in pixels
+							self.maxstr = gr.getStringWidth(self.winglist[1]) --also in pixels
+							--find largest width
+							for i,v in ipairs(self.winglist) do --using ipairs will only use the wingnames that are listed by number keys, not the wing tables listed by string wingname keys 
+								local wname = SubfromHash(v)
+								local str_pixwidth = gr.getStringWidth(wname)
+								if str_pixwidth > self.maxstr then
+									self.maxstr = str_pixwidth
+								end
+								local lwidth = str_pixwidth + configs[style].extrabuf_x
+								if lwidth > self.maxwidth then
+									self.maxwidth = lwidth
+								end
+							end
+						end						
+						
+						--now do extra check to see if the player is alone
+						--first check if player is in a wing 
+						local playerisinwing = false
+						local ply = hv.Player
+						if ply ~= nil and ply:isValid() then
+							local pwing = ply:getWing()
+							if pwing ~= nil and pwing:isValid() then 
+								playerisinwing = true
+								--print("player_is_in_wing!...\n")
+							end 
+						end
+						--at this point in function we know there is at least 1 wing in mission
+						--if there is only 1 wing with 1 ship and the player is in a wing, 
+						--then that 1 ship in that 1 wing must be the player						
+						if #wings == 1 and #wings[1] == 1 and playerisinwing then 
+							self.isplayeralone = true
+						end
+					end 
+				end 
+				if wings == nil then 
+					self.isplayeralone = true
+					self.winglist = {}
+				end
+			end
+		end
+
+		--draws the wing gauge every frame, uses DrawWingSection()
+		if mode == "onframe" and isinmission then
+			--get list of wingnames to draw, end if none
+			local winglist = self.winglist
+			if #winglist <= 0 then return end
+			
+			--take care of scaling and positioning
+			local maxwidth = self.maxwidth
+			--give maxwidth some buffer 
+			maxwidth = maxwidth + buf*2
+			--keep constant width if using for RTT gauge
+			local setRTTwidth = 179
+			if self.RTT.use and gauge ~= nil and maxwidth < setRTTwidth and style == "grid" then 
+				maxwidth = setRTTwidth
+			end 
+			
+			--set rectangle coordinates
+			local res = { x = gr.getScreenWidth(), y = gr.getScreenHeight() }
+			local start_coor = {x=0, y=0}
+			if (self.RTT.use and gauge~=nil) then 
+				--x and y at 2,2 since drawing to gauge, that way thicker lines can be seen. If at 0,0 then gauge cuts off lines
+				start_coor.x = 2 
+				start_coor.y = 2
+			else
+				start_coor.x = (self.origin.x * res.x) + self.offset.x 
+				start_coor.y = (self.origin.y * res.y) + self.offset.y		
+			end
+
+			local y1 = start_coor.y + slineh*1.4 --bottom of header rectangle
+			local dotstart_x = start_coor.x + (maxwidth/2)
+			if style == "grid" then --this ensures that dots don't start until end of longest wingname
+				dotstart_x = start_coor.x + self.maxstr + buf*5
+			end 
+			local isdrawn = false
+			local isgaugeon = false
+
+			local iwingoff = alldheight + wnameoff + buf
+			local finalyend
+			local wingsdrawn = 0
+			--for each wing, draw dots
+			for _, v in ipairs(winglist) do --using ipairs will only use the wingnames that are listed by number keys, not the wing tables listed by string wingname keys 
+				local ystart = y1 + slineh + (iwingoff*wingsdrawn) 
+				isdrawn = DrawWingSection(v, dotstart_x, ystart, start_coor.x)
+				local yend = ystart + iwingoff - slineh/1.2
+				--gr.setColor(105, 105, 105, 255)
+				if isdrawn then
+					wingsdrawn = wingsdrawn + 1
+					if isplayergaugeon and style=="default" then 
+						gr.setColor(r,g,b,int)
+						gr.setLineWidth(1)
+						dr("drawLine", {start_coor.x, yend, start_coor.x+maxwidth, yend})
+					end
+					isgaugeon = true
+					finalyend = yend
+				end
+			end
+
+			--if we didn't draw any wing sections then stop
+			if not isgaugeon or finalyend == nil then
+				return
+			end
+			
+			--draw rectangle and Wings header
+			--draw big gauge rectangle
+			if isplayergaugeon then 
+				gr.setLineWidth(2)
+				local bckgrdint = 0.3
+				--set to low intensity to draw background of gauge
+				gr.setColor(r, g, b, int*bckgrdint)
+				--draw filled header rectangle
+				dr("drawRectangle", {start_coor.x, start_coor.y, start_coor.x+maxwidth, y1, true})
+				--set back to reg intensity for outline and text
+				gr.setColor(r, g, b, int)
+				if style == "grid" then 
+					finalyend = finalyend + buf
+				end 
+				dr("drawRectangle", {start_coor.x, start_coor.y, start_coor.x+maxwidth, finalyend, false})
+				gr.setLineWidth(1)
+				dr("drawLine", {start_coor.x, y1, start_coor.x+maxwidth, y1})
+				--draw Wingmen header text, set highest intensity here
+				local ihtxt = 255-(0.8*(255-int))
+				if int == 0 then --ie if the gauge is off 
+					ihtxt = 0 
+				end 
+				gr.setColor(r, g, b, ihtxt)
+				local gnx = dotstart_x-(gr.getStringWidth(gaugename)/2)
+				if style == "grid" then 
+					gnx = start_coor.x + buf*2
+				end
+				dr("drawString", {gaugename, gnx, start_coor.y + buf})
+			end
+
+		end
+
+	end
+
+]
+
+	
+$State: GS_STATE_HUD_CONFIG
+$On State End: [
+	if CustomWingGauge.isactive then
+		CustomWingGauge:Draw("start",false) --false for not in-mission 
+	end
+]
+	
+$State: GS_STATE_GAME_PLAY
+
+$On Gameplay Start: [
+	if CustomWingGauge.isactive then 
+		CustomWingGauge.isplayeralone = false 
+		CustomWingGauge:Draw("start", true)	--true for in-mission 
+		
+		--check if cockpit display exists and if user wants to use RTT
+		CustomWingGauge.RTT.isactive = false
+		local player = hv.Player
+		if CustomWingGauge.RTT.use and player ~= nil and player:isValid() then
+			local pcockpit = player.CockpitDisplays
+			if pcockpit ~= nil and pcockpit:isValid() then 
+				if pcockpit[1] ~= nil and pcockpit[1]:isValid() then
+					CustomWingGauge.RTT.isactive = true
+				end
+			end 
+		end
+		
+		--setup custom scripted gauge render 
+		local gname = CustomWingGauge.RTT.gauge_name
+		if gname ~= nil then 
+			CustomWingGauge.RTT.use = true
+			if hu.getHUDGaugeHandle(gname) ~= nil and CustomWingGauge.RTT.use then 
+				hu.getHUDGaugeHandle(gname).RenderFunction = function(gauge)
+					if gr.hasViewmode(VM_INTERNAL) or gr.hasViewmode(VM_TRACK) then
+						CustomWingGauge:Draw("onframe", true, gauge)
+					end
+				end
+			end
+		end
+		
+	end
+]
+
+$On HUD Draw: [
+	if hu.HUDDrawn and mn.getMissionTime() > 0.1 and CustomWingGauge.isactive then
+		if not CustomWingGauge.RTT.isactive or ( CustomWingGauge.RTT.isactive and gr.hasViewmode(VM_CHASE) ) then
+			CustomWingGauge:Draw("onframe", true)
+		end
+	end
+]
+
+$On State End: [
+	if CustomWingGauge.isactive then
+		--CustomWingGauge.isactive = false
+		CustomWingGauge.winglist = {}
+	end
+]
+
+#End
