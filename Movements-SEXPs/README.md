@@ -1,33 +1,65 @@
-# Custom-Wingmen-Gauge
-Script files for wookieejedi's custom wingmen gauge for Freespace 2 Open. 
+# Custom-Movements-SEXPs
+Custom sexps and functions for FSO that allow for much easier ship movements and rotations.
+v1.2 (Dec 28, 2019)
 
 See main topic here:
-https://www.hard-light.net/forums/index.php?topic=95180.0
-
-Background: 
-This script creates a new wingmen HUD gauge that provides three large differences compared to the default Wingmen HUD Gauge.
+https://www.hard-light.net/forums/index.php?topic=96082.0
 
 
-Major Features:
+[img]https://cdn.discordapp.com/attachments/223511363807346691/650508690113167426/unknown.png[/img]
 
-1) Gauge writes the full wingnames. The script updates the width of the gauge so that you will always see the fill wing name. It will not show characters after a "#", too.
 
-2) Gauge can use two different styles, the traditional wingmean gauge layout, or a compact grid layout. To change to grid layout simply set CustomWingGauge.style = "grid".
+TLDR: Release of custom sexps which can make cap ship (or any ship) movements much easier and more natural looking. 
 
-3) Gauge shows a color for each wingman's relative health. The color transitions from green to orange to red. If the wingman is dead then a hollow red circle is shown. If the wingman departed then a hollow circle with a line is shown with the color of the departed wingman's health. If you would prefer to use gray-scale dots instead of green-orange-red dots then open the file and simply change CustomWingGauge.isgrayscaled = false to CustomWingGauge.isgrayscaled = true.
+Background
+Do you ever get frustrated when trying and get large ship movements to look good? I've found this be especially tricky if you want the ships to act dynamically, if you want big ships to rotate in a way that looks natural, or if you want many big ships to follow a leader ship and stay in a relative formation. Dynamic waypoints provide an invaluable tool, yet ships will stop following a waypoint path once the path is complete or immediately turn around to start the path again. I wanted a single sexp that told a ship to track a waypoint or ship, thus the ship would travel to the waypoint and then move again if the waypoint moved. 
 
-4) Different icons are used to differentiate between bombers and other ships. Bombers are shown as square icons and other ships are shown as circles. This feature can be turned off by setting CustomWingGauge.isbombdifferent = false
+It can be similarly tricky to get large ships to rotate to a certain orientation. The rotation maneuver sexp is useful but you aren't guaranteed that the ship will stop rotating when it reaches the desired orientation. Again, I wanted a single sexp that I could use once that would move a ship to a specified orientation with a natural looking movement. 
 
-5) You can specify the type of font the gauge uses from fonts.tbl. To specify a different font then the default change the values of CustomWingGauge.fonts = {default=1, low_resolution=3} to desired the font name or index.
+To achieve these goals, I developed a suite of custom lua sexps, and hopefully you might find something useful to your own missions! 
 
-6) You can specify the position of the gauge easily. To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl. For example, CustomWingGauge.origin = {x=0.85, y=0.2} and CustomWingGauge.offset = {x=0, y=0}. If you want to use RTT to a cockpit display you can also set CustomWingGauge.RTT = {use=true, gauge_name="Wingmen_Custom_RTT}. If using the RTT feature, the script will use RTT in internal view then switch to screen render for external view. Also, for RTT to work be sure to also make a '+Scripted Gauge:' entry in hud_gauges.tbl, and the 'gauge_name' should equal the 'Name' of the '+Scripted Gauge' in the 'hud_gauges.tbl'.
 
-Installation:
-Download and copy the "cuswingmengag-sct.tbm" file into your data/tables folder. If you know a bit of basic scripting you can also set this to appear on a mission by mission basis.
-To change the color of the gauges text and outline simply change the HUD color for the wingmen gauge in the HUD configuration settings.
+Overview
+In this release I have included sexps to rotate ships to a specific orientation, have a waypoint track a ship, a ship track a waypoint, and a ship track another ship. Fun things you can do with these sexps is to have entire fleet all rotate to the same orientation, have a battle group of ships follow around a leader command ship, order AI capships to 'attack' an enemy craft by pulling up next to it and rotating 90 degrees to bring broadsides to bear, ordering a ship track a target orientation, and many other things. 
 
-Last Items:
-Here is a screenshot showing it in action.
-Script file is attached. I would be happy to hear any feedback, suggestions, or overall thoughts.
 
-Thanks!
+Gritty Details
+The following custom lua sexps are included:
+ 
+move-to-orientation
+Moves a ship to a given orientation over a specified time duration. This sexp only has to be called once and can be used to make a much more natural looking rotational effect for ships. By default this sexp will issue a play-dead-persistent order with priority 200, but this priority value can be changed and the order can also not be issued. Also by default it will use the ship's tabled rotational velocity to make the rotation look natural. 
+
+early-stop-move-to-orientation
+Immediately terminates the custom `move-to-orientation` sexp for a ship. Only use this sexp to prematurely stop `move-to-orientation` for a ship. 
+
+add-waypoint-track-ship
+Sets a waypoint to a position relative to a ship continually. This sexp is an easier way to make a dynamic waypoint track a ship location. The waypoint will be moved to the specified coordinates relative to the ship at every time duration. If the ship is not present or destroyed, or departed then the waypoint will not update location. 
+
+remove-waypoint-track-ship
+Removes a waypoint tracking of a ship. This sexp removes the effect of 'add-waypoint-track-ship'.
+
+add-ai-goal-track-waypoint
+Adds a custom ai-goal for a ship to track a waypoint path. The ship will move to the final point in the waypoint path and remain in that position. If the waypoint path is moved the ship will follow the waypoint path again. Useful for having ships follow dynamic waypoints. Note, this order can only be removed via the sexps 'remove-ai-goal-track-waypoint' or 'clear-goals'.
+
+remove-ai-goal-track-waypoint
+Removes a custom `add-ai-goal-Track-Waypoint` goal.
+
+set-idle-track-orientation
+Sets an idle/resting orientation for a ship tracking a waypoint, either as an absolute orientation or an orientation relative to a given ship. When a ship that is tracking a waypoint is not moving forward it will move to this idle orientation. If a relative orientation is specified the sexp will get the target ship orientation and then add the pitch, bank, and heading values set in this sexp to create a final idle/resting orientation.
+
+unset-idle-track-orientation
+Unsets/removes the idle/resting orientation for a ship tracking a waypoint. This sexp will result in a ship tracking a waypoint to not attempt to change it's orientation when not moving.
+
+add-ai-goal-track-ship
+Adds a custom ai-goal for a ship to track another ship. The ordered ship will move to follow the target ship and then once stopped will rotate to the target ship orientation, or a variant to that orientation. This is a higher level sexp that runs 'add-Waypoint-Track-Ship' with 'add-ai-goal-Track-Waypoint' and 'set-Idle-Track-Orientation'.
+
+remove-ai-goal-track-ship
+Removes a custom ai-goal for a ship to track another ship. This is a higher level sexp that runs 'remove-waypoint-track-ship' with 'remove-ai-goal-track-waypoint' and 'unset-idle-track-orientation'.
+
+
+Usage:
+Download these two files from [url=https://github.com/wookieejedi/Custom-Movements-SEXPs]https://github.com/wookieejedi/Custom-Movements-SEXPs[/url] and then place them in your data/tables folder. Then just open FRED and you will see a new listing called LUA-Movements where all the sexps are located. There are detailed descriptions of each sexp and each argument. 
+
+Important! You need the most recently nightly build for these to work (Dec 2, 2019).
+
+I included an example mission that shows how to use the 'move-to-orientation' and the 'add-ai-goal-track-ship' which is a higher order sexp that runs 'add-waypoint-track-ship' with 'add-ai-goal-track-waypoint' and 'set-idle-track-orientation'.
