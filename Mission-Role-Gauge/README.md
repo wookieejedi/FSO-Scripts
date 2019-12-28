@@ -1,33 +1,22 @@
-# Custom-Wingmen-Gauge
-Script files for wookieejedi's custom wingmen gauge for Freespace 2 Open. 
+# Custom Mission Roles HUD Gauge
+Custom gauge that displays mission roles for FSO.
+v0.2 (May 08, 2019)
 
 See main topic here:
-https://www.hard-light.net/forums/index.php?topic=95180.0
+https://www.hard-light.net/forums/index.php?topic=95671.0
 
-Background: 
-This script creates a new wingmen HUD gauge that provides three large differences compared to the default Wingmen HUD Gauge.
+Background:
+Have you ever been playing a mission and completely forgot what each squadron or ship was supposed to do becuase you didn't take notes during the briefing? Wouldn't it be nice if the mission designer allowed you a cheat sheet to look at on the HUD? If you answered yes then you should tell the mission designer about this script! 
 
+Description:
+This script allows modders/FREDers to create a HUD gauge that shows mission roles. The script displays a simple HUD gauge that shows a list of names, followed by a respective description. The FREDer can use lua sexps to add or remove entries from list at any point in the mission, and the gauge will display those changes. 
 
-Major Features:
+Insallation:
+Go to this link: https://github.com/wookieejedi/Custom-Mission-Role-Gauge
+Download and copy the `cus_role_gauge-sexp.tbm` and `cus_role_gauge-sct.tbm` files into your mod's `data/tables` folder.
 
-1) Gauge writes the full wingnames. The script updates the width of the gauge so that you will always see the fill wing name. It will not show characters after a "#", too.
+Useage:
+Run FRED, and you will see a new sexps to add or remove entries to the list ("Change"->"Script_Action"). To set more specific parameters like gauge location on the HUD, simply open the script file in a text editor and change the `User Options` values. Don't worry if you aren't comfortable with editing script files, the `User Options` all have descriptions and are easy to change.   
 
-2) Gauge can use two different styles, the traditional wingmean gauge layout, or a compact grid layout. To change to grid layout simply set CustomWingGauge.style = "grid".
-
-3) Gauge shows a color for each wingman's relative health. The color transitions from green to orange to red. If the wingman is dead then a hollow red circle is shown. If the wingman departed then a hollow circle with a line is shown with the color of the departed wingman's health. If you would prefer to use gray-scale dots instead of green-orange-red dots then open the file and simply change CustomWingGauge.isgrayscaled = false to CustomWingGauge.isgrayscaled = true.
-
-4) Different icons are used to differentiate between bombers and other ships. Bombers are shown as square icons and other ships are shown as circles. This feature can be turned off by setting CustomWingGauge.isbombdifferent = false
-
-5) You can specify the type of font the gauge uses from fonts.tbl. To specify a different font then the default change the values of CustomWingGauge.fonts = {default=1, low_resolution=3} to desired the font name or index.
-
-6) You can specify the position of the gauge easily. To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl. For example, CustomWingGauge.origin = {x=0.85, y=0.2} and CustomWingGauge.offset = {x=0, y=0}. If you want to use RTT to a cockpit display you can also set CustomWingGauge.RTT = {use=true, gauge_name="Wingmen_Custom_RTT}. If using the RTT feature, the script will use RTT in internal view then switch to screen render for external view. Also, for RTT to work be sure to also make a '+Scripted Gauge:' entry in hud_gauges.tbl, and the 'gauge_name' should equal the 'Name' of the '+Scripted Gauge' in the 'hud_gauges.tbl'.
-
-Installation:
-Download and copy the "cuswingmengag-sct.tbm" file into your data/tables folder. If you know a bit of basic scripting you can also set this to appear on a mission by mission basis.
-To change the color of the gauges text and outline simply change the HUD color for the wingmen gauge in the HUD configuration settings.
-
-Last Items:
-Here is a screenshot showing it in action.
-Script file is attached. I would be happy to hear any feedback, suggestions, or overall thoughts.
 
 Thanks!
