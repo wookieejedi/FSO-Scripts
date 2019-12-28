@@ -55,7 +55,7 @@ Removes a custom ai-goal for a ship to track another ship. This is a higher leve
 
 
 Usage:
-Download these two files from [url=https://github.com/wookieejedi/Custom-Movements-SEXPs]https://github.com/wookieejedi/Custom-Movements-SEXPs[/url] and then place them in your data/tables folder. Then just open FRED and you will see a new listing called LUA-Movements where all the sexps are located. There are detailed descriptions of each sexp and each argument. 
+Download these two files from https://github.com/wookieejedi/Custom-Movements-SEXPs and then place them in your data/tables folder. Then just open FRED and you will see a new listing called LUA-Movements where all the sexps are located. There are detailed descriptions of each sexp and each argument. 
 
 Important! You need the most recently nightly build for these to work (Dec 2, 2019).
 
