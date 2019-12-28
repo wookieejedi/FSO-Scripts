@@ -6,9 +6,6 @@ See main topic here:
 https://www.hard-light.net/forums/index.php?topic=96082.0
 
 
-[img]https://cdn.discordapp.com/attachments/223511363807346691/650508690113167426/unknown.png[/img]
-
-
 TLDR: Release of custom sexps which can make cap ship (or any ship) movements much easier and more natural looking. 
 
 Background
