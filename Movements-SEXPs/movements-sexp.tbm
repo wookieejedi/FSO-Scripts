@@ -125,7 +125,7 @@ $Operator: set-idle-track-orientation
 $Category: Change
 $Subcategory: LUA-Movements
 $Minimum Arguments: 4
-$Maximum Arguments: 6
+$Maximum Arguments: 7
 $Return Type: Nothing
 $Description: Sets an idle/resting orientation for a ship tracking a waypoint, either as an absolute orientation or an orientation relative to a given ship. When a ship that is tracking a waypoint is not moving forward it will move to this idle orientation. If a relative orientation is specified the sexp will get the target ship orientation and then add the pitch, bank, and heading values set in this sexp to create a final idle/resting orientation. The ship will actively mantain this orientation by default. This sexp will overwrite any previous idle orientation information for this ship.
 $Parameter: 
