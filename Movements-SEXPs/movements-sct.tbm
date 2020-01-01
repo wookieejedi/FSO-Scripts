@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.2, released on December 28, 2019 by wookieejedi
+	--Version 1.3, released on January 01, 2020 by wookieejedi
 	--Description: custom sexps and functions that allow for much easier ship movements and rotations
 	--Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 	
