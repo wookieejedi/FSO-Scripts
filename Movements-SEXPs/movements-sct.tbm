@@ -155,40 +155,6 @@ $On Game Init: [
         
     end
 
-		local f = m3x3[3]
-
-		local heading = math.atan2safe(f[1], f[3]) 
-
-		local l_sinh = math.sin(heading)
-		local l_cosh = math.cos(heading)
-		local cosp
-
-		if math.abs(l_sinh) > math.abs(l_cosh) then
-			cosp = f[1] * l_sinh
-		else
-			cosp = f[3] * l_cosh
-		end
-
-		local d = math.sqrt( (f[1] * f[1]) + (f[3] * f[3]) ) --( fvec.xyz.x^2 + fvec.xyz.z^2 )^0.5
-
-		local pitch = math.atan2safe(-f[2], d) --<gives correct pitch 
-
-		local bank 
-
-		if cosp == 0 then
-			bank = 0
-		else
-			local sinb = m3x3[1][2] / cosp
-			local cosb = m3x3[2][2] / cosp
-			
-			bank = math.atan2safe(sinb, cosb)
-		end
-
-		--ba.print("pitch: "..math.deg(pitch)..", bank:"..math.deg(bank)..", heading:"..math.deg(heading))
-		return {p=pitch, b=bank, h=heading}
-		
-	end
-
 	function Movements:PBHisValid(pbh_table) --in form {p=,b=h=}
 	
 		if type(pbh_table) ~= "table" then 
