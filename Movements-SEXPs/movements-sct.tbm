@@ -202,7 +202,7 @@ $On Game Init: [
 						--if it's over 270 degrees make it negative since that's how the FSO coordinate system works
 						local pi = math.pi
 						if pbh[k] >= pi/180 then
-							pbh[k] = (2*pi) - pbh[k]
+							pbh[k] = pbh[k] - (2*pi)
 						end
 						--remember this is in radians
 					end
