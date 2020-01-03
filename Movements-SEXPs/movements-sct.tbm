@@ -1146,8 +1146,9 @@ $On Game Init: [
 	end
 
 
-	function Movements:RandomRadius(shipname) --gets a random value that is between the radius and diameter of a ship with a - or + sign
+	function Movements:RandomRadius(shipname, allownegative) --gets a random value that is between the radius and diameter of a ship with a - or + sign
 		local final = 100
+		allownegative = allownegative or true
 		if shipname ~= nil then
 			local ship = mn.Ships[shipname]
 			if ship ~= nil and ship:isValid() then
@@ -1160,7 +1161,7 @@ $On Game Init: [
 							radius = self:Round(radius)
 							math.random()
 							final = math.random(radius, radius*2)
-							if math.random(0,1) == 0 then
+							if allownegative and math.random(0,1) == 0 then
 								final = final * -1
 							end
 						end	
@@ -1186,20 +1187,19 @@ $On Game Init: [
 		end
 		local track_interval = 1.0 --default
 		local track_distance = 0	--default
+		local extra_distance = self:RandomRadius(ship_to_order_name, false)
 		
-		if type(off_x) ~= "number" then
-			off_x = self:RandomRadius(ship_to_track_name)
+		local offset_xyz = {off_x, off_y, off_z}		
+		for i_off,v_off in ipairs(offset_xyz) do
+			if type(v_off) ~= "number" then
+				local off = self:RandomRadius(ship_to_track_name)
+				local extra = extra_distance
+				if off < 0 then
+					extra = extra * -1
+				end
+				offset_xyz[i_off] = off + extra
+			end		
 		end
-		
-		if type(off_y) ~= "number" then
-			off_y = self:RandomRadius(ship_to_track_name)
-		end
-		
-		if type(off_z) ~= "number" then
-			off_z = self:RandomRadius(ship_to_track_name)
-		end
-		
-		local offset_xyz = {off_x, off_y, off_z}
 		
 		if type(pbh_p) ~= "number" then
 			pbh_p = 0
