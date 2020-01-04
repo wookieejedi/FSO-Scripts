@@ -180,11 +180,26 @@ $On Game Init: [
 	end
 
 
+	function Movements:PrepareAngle(ang)
+		if type(ang) == "number" then 
+			if ang < 0 then
+				ang = ( math.pi * 2 ) + ang
+				--ba.print("Returning_pbh2 of "..pbh_adjusted[v] .."...\n")
+			end				
+		else
+			ba.print("Movements Error: input angle value for function Movements:PrepareAngle() is invalid, returning input...\n")
+		end
+		return ang
+	end
+
 	function Movements:NormalizePBH(pbh)  --in form {p=,b=h=}
 		--Remember: 270 ends up being -90 and 360 ends up being 0
 		if self:PBHisValid(pbh) then 
 			local m3x3 = self:PBH_3x3(pbh)
 			local pbh_adjusted = Movements:m3x3_to_PBH(m3x3)
+			for _,v in ipairs({"p", "b", "h"}) do
+				pbh_adjusted[v] = self:PrepareAngle(pbh_adjusted[v])
+			end
 			return pbh_adjusted
 		else
 			ba.print("Movements Error: input pbh value for function Movements:NormalizePBH() is invalid, returning input...\n")
@@ -349,6 +364,10 @@ $On Game Init: [
 		local final_pbh = self:NormalizePBH(final_pbh)
 		local final_pbh_updated = {p=final_pbh.p, b=final_pbh.b, h=final_pbh.h}
 		
+		for k,v in pairs(initial_pbh) do
+			initial_pbh[k] = self:PrepareAngle(v)
+		end
+		
 		--add entry using shipname as key and update total number variable
 		local entry = {
 			shipname = shipname, 
@@ -415,7 +434,7 @@ $On Game Init: [
 							local shipor = ship.Orientation
 							v.isrotating = true
 							for _,val in ipairs({"p","b","h"}) do
-								v.initial_pbh[val] = shipor[val]
+								v.initial_pbh[val] = self:PrepareAngle(shipor[val])
 							end
 							
 							--update target ship's orientation if not nil
@@ -424,7 +443,7 @@ $On Game Init: [
 							--^will also return pbh if not target ship set
 							if pbh_updated ~= nil then
 								for k,val in pairs(pbh_updated) do
-									v.final_pbh_updated[k] = val
+									v.final_pbh_updated[k] = self:PrepareAngle(val)
 									--ba.print("v.final_pbh_updated[k]"..v.final_pbh_updated[k].."...\n")
 								end
 							else
@@ -506,7 +525,7 @@ $On Game Init: [
 					ship.Physics.RotationalVelocity = ba.createVector(0, 0, 0)
 				end
 				
-				---[[
+				--[[
 				local fo = {final_pbh.p, final_pbh.b, final_pbh.h}
 				local iop = {initial_pbh.p, initial_pbh.b, initial_pbh.h}
 				local co = {ort.p, ort.b, ort.h}
@@ -527,7 +546,7 @@ $On Game Init: [
 				--update ship orientation		
 				ship.Orientation = ba.createOrientation(ort.p, ort.b, ort.h)
 				
-				---[[
+				--[[
 				local co2 = {ship.Orientation.p, ship.Orientation.b, ship.Orientation.h}
 				for i=1,3 do
 					co2[i] = self:Round(math.deg(co2[i]), 2)
