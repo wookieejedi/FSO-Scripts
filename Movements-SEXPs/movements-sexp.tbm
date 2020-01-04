@@ -193,10 +193,10 @@ $Parameter:
 	+Description: Pitch of idle orientation in degrees relative to target ship orientation. Default is 0 (same pitch as target). Any value is valid and will be converted to range within 0-359.
 	+Type: Number
 $Parameter: 
-	+Description: Pitch of idle orientation in degrees relative to target ship orientation. Default is 0 (same bank as target). Any value is valid and will be converted to range within 0-359. 
+	+Description: Bank of idle orientation in degrees relative to target ship orientation. Default is 0 (same bank as target). Any value is valid and will be converted to range within 0-359. 
 	+Type: Number
 $Parameter: 
-	+Description: Pitch of idle orientation in degrees relative to target ship orientation. Default is 0 (same heading as target). Any value is valid and will be converted to range within 0-359.
+	+Description: Heading of idle orientation in degrees relative to target ship orientation. Default is 0 (same heading as target). Any value is valid and will be converted to range within 0-359.
 	+Type: Number
 
 $Operator: remove-ai-goal-track-ship

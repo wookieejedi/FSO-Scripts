@@ -180,26 +180,48 @@ $On Game Init: [
 	end
 
 
-	function Movements:PrepareAngle(ang)
-		if type(ang) == "number" then 
-			if ang < 0 then
-				ang = ( math.pi * 2 ) + ang
-				--ba.print("Returning_pbh2 of "..pbh_adjusted[v] .."...\n")
-			end				
-		else
-			ba.print("Movements Error: input angle value for function Movements:PrepareAngle() is invalid, returning input...\n")
-		end
-		return ang
-	end
-
-	function Movements:NormalizePBH(pbh)  --in form {p=,b=h=}
+	function Movements:NormalizePBH(pbh, initial_pbh)  --in form {p=,b=h=}
 		--Remember: 270 ends up being -90 and 360 ends up being 0
-		if self:PBHisValid(pbh) then 
+        if self:PBHisValid(pbh) then 
 			local m3x3 = self:PBH_3x3(pbh)
-			local pbh_adjusted = Movements:m3x3_to_PBH(m3x3)
-			for _,v in ipairs({"p", "b", "h"}) do
-				pbh_adjusted[v] = self:PrepareAngle(pbh_adjusted[v])
-			end
+            local pbh_adjusted = self:m3x3_to_PBH(m3x3)
+            local pi = math.pi
+            local pi2 = pi*2
+            if initial_pbh ~= nil and self:PBHisValid(initial_pbh) then
+                for _,v in ipairs({"p", "b", "h"}) do
+                    --only doing this if distance > 180 degrees
+                    local initial = initial_pbh[v]
+                    local final = pbh_adjusted[v]
+                    if math.abs(final - initial) > pi then
+                        local adjusted
+                        --4 cases for initial and final angles: + with + or - and - with + or -
+                        -- + + <- is initial > or final?
+                        if initial >= 0 and final >= 0 then
+                            if initial > final then
+                                --ie i=250 and f=10
+                                adjusted = final + pi2
+                            else --initial < final
+                                --ie i=10 and f=250
+                                adjusted = final - pi2
+                            end
+                        end
+                        -- + - 
+                        if initial >= 0 and final < 0 then
+                            --ie i=92 and f=-90
+                            adjusted = final + pi2
+                        end
+                        -- - + 
+                        if initial < 0 and final >= 0 then
+                            --ie i=-90 and f=250
+                            adjusted = final - pi2
+                        end
+                        -- - - <- both are negative so already in same quandrant
+                        if adjusted ~= nil then
+                            pbh_adjusted[v] = adjusted
+                        end
+                    end
+                end
+            end
 			return pbh_adjusted
 		else
 			ba.print("Movements Error: input pbh value for function Movements:NormalizePBH() is invalid, returning input...\n")
@@ -256,12 +278,11 @@ $On Game Init: [
 		if type(time_delay) ~= "number" then
 			time_delay = 0
 		end
-		if type(time_for_rotation) ~= "number" then
-			time_for_rotation = -1
-		end
-		
 		if time_delay < 0 then
 			time_delay = 0
+		end
+		if type(time_for_rotation) ~= "number" then
+			time_for_rotation = -1
 		end
 
 		if not self:PBHisValid(final_pbh) then
@@ -276,6 +297,10 @@ $On Game Init: [
 		if not ship:isValid() then return end
 
 		local initial_pbh = {p=self:Chop(ship.Orientation.p), b=self:Chop(ship.Orientation.b), h=self:Chop(ship.Orientation.h)}
+
+		--normalize pbh values
+		final_pbh = self:NormalizePBH(final_pbh)
+		local final_pbh_updated = self:NormalizePBH(final_pbh, initial_pbh)
 		
 		--for default find highest number within rotational vector
 		--negative number runs default value
@@ -295,11 +320,13 @@ $On Game Init: [
 						--calculate the largest magnitude of radians the ship has to transverse to get to the final orientation
 						local k = pbh_list[i]
 						local ship_k = self:Round(initial_pbh[k], 7)
-						local final_k = self:Round(final_pbh[k], 7)
+						local final_k = self:Round(final_pbh_updated[k], 7)
 						--^make sure ship_k and final_k are not pi! it causes an nan
 						--ba.print("Movements Status: ship "..k.." is "..ship_k.." and final "..k.." is "..final_k.." for ship "..shipname.."...\n")
 						
-						local angular_distance = ( math.abs(( (ship_k)^2 ) - ( (final_k)^2 )) )^0.5
+						--angles already normalized to find shortest distance
+						local angular_distance = math.abs(final_k - ship_k)
+						
 						--ba.print("Movements Status: angular_distance of "..angular_distance.." for ship "..shipname.."...\n")
 						
 						--cap at pi radians (180 degrees)
@@ -359,21 +386,13 @@ $On Game Init: [
 		if play_dead_PR >= 0 then
 			mn.runSEXP("( add-goal !"..shipname.."! ( ai-play-dead-persistent !"..play_dead_PR.."! ) )")
 		end
-
-		--normalize pbh values
-		local final_pbh = self:NormalizePBH(final_pbh)
-		local final_pbh_updated = {p=final_pbh.p, b=final_pbh.b, h=final_pbh.h}
-		
-		for k,v in pairs(initial_pbh) do
-			initial_pbh[k] = self:PrepareAngle(v)
-		end
 		
 		--add entry using shipname as key and update total number variable
 		local entry = {
 			shipname = shipname, 
 			initial_pbh = initial_pbh,
 			final_pbh = final_pbh, --this is the base final pbh we never want to change
-			final_pbh_updated = final_pbh_updated, --this adds the target's oreintation and can change
+			final_pbh_updated = final_pbh_updated, --this adds the target's oreintation and can change, is set when rotation starts
 			start_time = start_time, 
 			end_time = end_time,
 			play_dead_PR = play_dead_PR,
@@ -434,7 +453,7 @@ $On Game Init: [
 							local shipor = ship.Orientation
 							v.isrotating = true
 							for _,val in ipairs({"p","b","h"}) do
-								v.initial_pbh[val] = self:PrepareAngle(shipor[val])
+								v.initial_pbh[val] = shipor[val]
 							end
 							
 							--update target ship's orientation if not nil
@@ -442,8 +461,10 @@ $On Game Init: [
 							--^ will be nil if tracker nil and also if targetship_name is set but not in mission
 							--^will also return pbh if not target ship set
 							if pbh_updated ~= nil then
+								--make sure to normalize to inital 
+								pbh_updated = self:NormalizePBH(pbh_updated, v.initial_pbh)
 								for k,val in pairs(pbh_updated) do
-									v.final_pbh_updated[k] = self:PrepareAngle(val)
+									v.final_pbh_updated[k] = val
 									--ba.print("v.final_pbh_updated[k]"..v.final_pbh_updated[k].."...\n")
 								end
 							else
@@ -495,7 +516,7 @@ $On Game Init: [
 		for _,v in ipairs({"p","b","h"}) do
 			pbh[v] = initial_pbh[v]*(1-percentdone) + final_pbh[v]*percentdone
 		end
-			
+
 		--[[
 		ba.print("initial_pbh p,b,h "..math.deg(initial_pbh.p)..", "..math.deg(initial_pbh.b)..", "..math.deg(initial_pbh.h).."...\n")
 		ba.print("final_ort p,b,h "..math.deg(final_pbh.p..", "..math.deg(final_pbh.b)..", "..math.deg(final_pbh.h).."...\n")
