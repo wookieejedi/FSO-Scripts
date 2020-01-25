@@ -69,6 +69,25 @@ $On Game Init: [
 
 	end
 
+	function Movements:Get_safe_number(num, iswholenumber, onlypositive, abovezero) --defaults are all true
+		if type(num) ~= "number" then
+			num = 0
+		end
+		iswholenumber = iswholenumber or true
+		onlypositive = onlypositive or true
+		abovezero = abovezero or true
+		if iswholenumber then
+			num = self:Round(num)
+		end
+		if onlypositive and num < 0 then
+			num = 0
+		end
+		if abovezero and num <= 0 then
+			abovezero = 1
+		end
+		return num
+	end
+
 	function Movements:Chop(inputnumber)
 		--if math.abs(inputnumber) < 0.000001 then 
 			--inputnumber = 0 
@@ -334,6 +353,7 @@ $On Game Init: [
 							angular_distance = 3.141592
 						end
 						local angular_velocity = vels[i] --radians/sec
+						angular_velocity = self:Get_safe_number(angular_velocity, false, false, true) --iswholenumber, onlypositive, abovezero defaults are true
 						--ba.print("Movements Status: angular_velocity of radians/sec "..angular_velocity.." for ship "..shipname.."...\n")
 						
 						local l_time = angular_distance/angular_velocity
@@ -363,6 +383,9 @@ $On Game Init: [
 		
 		--set times
 		local start_time = time_delay + current_time
+		if type(time_for_rotation) ~= "number" then
+			time_for_rotation = 0
+		end
 		if time_for_rotation < 0 then 
 			time_for_rotation = 0
 			--ba.print("Movements Error: time_for_rotation < 0 for ship "..shipname.."...\n")
@@ -814,8 +837,14 @@ $On Game Init: [
 				local sphycis = ship.Physics
 				if sphycis ~= nil then
 					local current_speed_z = sphycis:getForwardSpeed()
+					current_speed_z = self:Get_safe_number(current_speed_z) --iswholenumber, onlypositive, abovezero defaults are true
+					
 					local max_speed_z = sphycis.VelocityMax[3]
-					local decleration_time = sphycis.ForwardDecelerationTime 
+					max_speed_z = self:Get_safe_number(max_speed_z)
+					
+					local decleration_time = sphycis.ForwardDecelerationTime
+					decleration_time = self:Get_safe_number(decleration_time)
+					
 					local decleration_time_adjusted = decleration_time * 3.6
 					local percent_speed = current_speed_z/max_speed_z
 					local stop_adusted = math.ceil ( decleration_time_adjusted * percent_speed )
@@ -823,7 +852,6 @@ $On Game Init: [
 					--even going 10 m/s with 10 s declaration time it still takes ship 13 seconds to come to complete stop
 					--stoptime = decleration_time + stop_adusted
 					stoptime = math.ceil ( decleration_time * percent_speed )
-					
 					--^ this is not systematic at all, just based on observations and guesses
 					--fortunately the ship will rotate no matter what
 				end
