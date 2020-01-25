@@ -1410,6 +1410,13 @@ $On Death: [
 	end
 ]
 
+$On Warp Out: [
+	local hook_ship = hv.Self
+	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
+		Movements:Ship_DoD_Remove(hook_ship.Name)
+	end	
+]
+
 $On Ship Depart: [
 	local hook_ship = hv.Ship
 	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
