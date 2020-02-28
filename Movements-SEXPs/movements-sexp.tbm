@@ -24,7 +24,7 @@ $Parameter:
 	+Description: Time delay in seconds to start effect. Default is 0 (effect starts immediately). Any value <= 0 will evaluate to 0.
 	+Type: Number
 $Parameter: 
-	+Description: Time in seconds of rotation effect. The default duration is calculated as the time needed to move to the final orientation using the max rotational velocity of the ship. Any value <= 0 will also use the default duration calculation. 
+	+Description: Time in seconds of rotation effect. The default duration is calculated as the time needed to move to the final orientation using the max rotational velocity of the ship. Any value < 0 will also use the default duration calculation. 
 	+Type: Number
 $Parameter: 
 	+Description: Priority for the automatic play-dead-persistent order. Default is 200. If set to a negative value then no play-dead-order-persistent order is issued. If set, the play-dead-persistent order will be removed automatically when the effect is over. 
