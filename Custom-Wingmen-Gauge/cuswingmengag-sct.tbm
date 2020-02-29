@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 	
-	--Version 2.7, released on April 22, 2019 by wookieejedi
+	--Version 2.8, released on February 07, 2020 by wookieejedi
 	CustomWingGauge = {} --makes a global variable! This is the only global variable this script creates. 
 	
 	---------------------------------
@@ -63,6 +63,158 @@ $On Game Init: [
 		
 	CustomWingGauge.winglist = {} --will save as table of wingnames as strings
 	CustomWingGauge.basecolor = {35,35,35,255} --dark gray as default
+	CustomWingGauge.statuses = {notarrived=0, inmission=1, departed=2, destroyed=3}
+
+	function CustomWingGauge:ColorMixer(colorA,colorB,percentage)
+
+			--validity checks
+			local lb = {0,0,0,0}
+			if colorA == nil or colorB == nil then return lb end
+			if #colorA ~= 4 or #colorB ~= 4 then return lb end
+			percentage = percentage or 1
+			if percentage > 1 then
+				percentage = 1
+			end
+			if percentage < 0 then
+				percentage = 0
+			end
+
+			--mix colors
+			for i=1,3 do
+				local step = math.abs(colorA[i] - colorB[i])
+				local cstart = colorA[i]
+				local cend = colorB[i]
+				local perstep = 1 - percentage
+				if cstart <= cend then
+					lb[i] = cstart + perstep*step
+				else
+					lb[i] = cstart - perstep*step
+				end
+			end
+
+			lb[4] = colorA[4]
+
+			return lb
+
+		end
+
+	function CustomWingGauge:GetWingList() --reads in the current mission file and extracts and saves the squadron wingnames
+		--split squadron wing name string into each wing and save to global winglist table
+		local function WingStr_toTable(str)
+			if str == nil then return {} end
+			local q = tostring[["]]
+			local q1 = string.find(str,q)
+			local start = string.sub(str,q1,#str)
+			local winglist = {}
+			local scom = ""
+
+			for i=1,#start do
+				local ss = string.sub(start,i,i)
+				local ss_1 = string.sub(start,i,i+1)
+				local p1_ss_1 = string.sub(start,i-1,i+1)
+
+				if ss ~= q and ss_1 ~= q.." " and p1_ss_1 ~= q.." "..q then
+					scom = scom .. ss
+				end
+
+				if ss_1 == q.." " then
+					table.insert(winglist,scom)
+					scom = ""
+				end
+
+			end
+			if #winglist > 0 then
+				return winglist
+			else
+				return {}
+			end
+		end
+
+	--reads in the current mission file and finds the squadron names, saves as string
+		local mission_name = mn.getMissionFilename()
+		if string.find(mission_name,".fs2") == nil then
+			mission_name = mission_name .. ".fs2"
+		end
+		local missionfile = cf.openFile(mission_name, "r", "data/missions")
+		local isfound = false
+		local wingliststring = ""
+		local readline
+		if missionfile:isValid() then
+			repeat
+				readline = missionfile:read("*l")
+				if readline ~= nil then
+					if string.find(readline, "Squadron wing names") ~= nil then
+						wingliststring = readline
+						isfound = true
+					end
+				end
+			until readline == nil or isfound == true
+		end
+		missionfile:close()
+		if wingliststring ~= "" and wingliststring ~= nil then
+			ba.print("Successfully found Squadron Wing Names...\n")
+			return WingStr_toTable(wingliststring)
+		else
+			ba.print("Did not find Squadron Wing Names, assuming default names...\n")
+			return {"Alpha","Beta","Gamma","Delta","Epsilon"}
+		end
+
+	end
+
+	function CustomWingGauge:firstToUpper(str)
+		local ST = ""
+		if str ~= nil then 
+			ST = str:gsub("^%l", string.upper)
+		end 
+		return ST
+	end
+
+	function CustomWingGauge:SubfromHash(str) --gets string sub before any # sign
+		if str == nil then return "" end
+
+		if string.find(str,"#") then
+			local loc = string.find(str,"#")-1
+			local sub = string.sub(str,1,loc)
+			if sub == nil then sub = "" end
+			return sub
+		else
+			return str
+		end
+	end
+	
+	function CustomWingGauge:ClasstoNumber(shipname)
+		local num
+		if shipname ~= nil then
+			if mn.evaluateSEXP("( is-ship-type !bomber! !"..shipname.."! ) ") then
+				num = 2
+			else
+				num = 1
+			end
+		end
+		return num or 1
+	end
+	
+	function CustomWingGauge:UpdateWingmenStatus(shipname, status_mode)
+		if shipname ~= nil and (status_mode == self.statuses.departed or status_mode == self.statuses.destroyed) then 
+			local ship = mn.Ships[shipname]
+			if ship ~= nil and ship:isValid() then
+				--get ship wing
+				local s_wing = ship:getWing()
+				if s_wing ~= nil and s_wing.Name ~= nil and self.winglist ~= nil and #self.winglist > 0 then 
+					--if it has a wing check if it's a wingmen wing
+					local wing = self.winglist[s_wing.Name]
+					--find ship and update status
+					if wing ~= nil then
+						for i_ship, v_ship in ipairs(wing) do
+							if v_ship.name == shipname then
+								wing[i_ship].status = status_mode
+							end
+						end
+					end
+				end 
+			end
+		end
+	end
 	
 	function CustomWingGauge:Draw(mode, isinmission, gauge) --Function makes a wingmen gauge with colors showing wingmen health and full wingnames. The input 'mode' can be start or onframe. This function uses 1 global variable, CustomWingGauge.
 
@@ -115,7 +267,7 @@ $On Game Init: [
 			self.style = "default"
 		end 
 		local style = self.style
-		local dspace = dsize*2.2 -- + round(dsize*1.5)
+		local dspace = dsize*2.2 -- + math.round(dsize*1.5)
 		local buf = 4 --buffer pixels around rectangle
 		if islowres then 
 			buf = 2
@@ -144,123 +296,6 @@ $On Game Init: [
 		local alldheight = configs[style].namestart_y
 		local wnameoff = configs[style].extra_y
 		--ba.print("Canvas_Size x, y: "..configs[style].canvas_size.x..", "..configs[style].canvas_size.y.."...\n")
-		
-		local function firstToUpper(str)
-			local ST = ""
-			if str ~= nil then 
-				ST = str:gsub("^%l", string.upper)
-			end 
-			return ST
-		end
-
-		local function ColorMixer(colorA,colorB,percentage)
-
-			--validity checks
-			local lb = {0,0,0,0}
-			if colorA == nil or colorB == nil then return lb end
-			if #colorA ~= 4 or #colorB ~= 4 then return lb end
-			percentage = percentage or 1
-			if percentage > 1 then
-				percentage = 1
-			end
-			if percentage < 0 then
-				percentage = 0
-			end
-
-			--mix colors
-			for i=1,3 do
-				local step = math.abs(colorA[i] - colorB[i])
-				local cstart = colorA[i]
-				local cend = colorB[i]
-				local perstep = 1 - percentage
-				if cstart <= cend then
-					lb[i] = cstart + perstep*step
-				else
-					lb[i] = cstart - perstep*step
-				end
-			end
-
-			lb[4] = colorA[4]
-
-			return lb
-
-		end
-
-		local function GetWingList() --reads in the current mission file and extracts and saves the squadron wingnames
-			--split squadron wing name string into each wing and save to global winglist table
-			local function WingStr_toTable(str)
-				if str == nil then return {} end
-				local q = tostring[["]]
-				local q1 = string.find(str,q)
-				local start = string.sub(str,q1,#str)
-				local winglist = {}
-				local scom = ""
-
-				for i=1,#start do
-					local ss = string.sub(start,i,i)
-					local ss_1 = string.sub(start,i,i+1)
-					local p1_ss_1 = string.sub(start,i-1,i+1)
-
-					if ss ~= q and ss_1 ~= q.." " and p1_ss_1 ~= q.." "..q then
-						scom = scom .. ss
-					end
-
-					if ss_1 == q.." " then
-						table.insert(winglist,scom)
-						scom = ""
-					end
-
-				end
-				if #winglist > 0 then
-					return winglist
-				else
-					return {}
-				end
-			end
-
-		--reads in the current mission file and finds the squadron names, saves as string
-			local mission_name = mn.getMissionFilename()
-			if string.find(mission_name,".fs2") == nil then
-				mission_name = mission_name .. ".fs2"
-			end
-			local missionfile = cf.openFile(mission_name, "r", "data/missions")
-			local isfound = false
-			local wingliststring = ""
-			local readline
-			if missionfile:isValid() then
-				repeat
-					readline = missionfile:read("*l")
-					if readline ~= nil then
-						if string.find(readline, "Squadron wing names") ~= nil then
-							wingliststring = readline
-							isfound = true
-						end
-					end
-				until readline == nil or isfound == true
-			end
-			missionfile:close()
-			if wingliststring ~= "" and wingliststring ~= nil then
-				ba.print("Successfully found Squadron Wing Names...\n")
-				return WingStr_toTable(wingliststring)
-			else
-				ba.print("Did not find Squadron Wing Names, assuming default names...\n")
-				return {"Alpha","Beta","Gamma","Delta","Epsilon"}
-			end
-
-		end
-
-		local function SubfromHash(str) --gets string sub before any # sign
-			if str == nil then return "" end
-
-			if string.find(str,"#") then
-				local loc = string.find(str,"#")-1
-				local sub = string.sub(str,1,loc)
-				if sub == nil then sub = "" end
-				return sub
-			else
-				return str
-			end
-		end
 
 		local function dr(functype, arglist)
 			--string
@@ -342,8 +377,8 @@ $On Game Init: [
 					local ship = mn.Ships[sname]
 					if ship:isValid() then
 						--get class
-						local sclass = tostring(ship.Class.Type.Name)  --ship.Class.TypeString or "fighter"
-						self.winglist[wingname][i] = {name=sname,hp=100,class=sclass} --even if starting ship is not at 100, it gets changed to correct hp in following block
+						local class = self:ClasstoNumber(sname)
+						self.winglist[wingname][i] = {name=sname, hp=100, class=class, status=0} --even if starting ship is not at 100, it gets changed to correct hp in following block
 					end
 				end
 			end
@@ -376,7 +411,7 @@ $On Game Init: [
 							--take each ship and place it in wingslots, overlapping is good as long as <=4 or 5 or 6
 							--convert to number within dot range of wing (ie 7->1)
 							--make both uppercase so string match actually works
-							local aliveu, wingu = firstToUpper(alivesname), firstToUpper(wingname)
+							local aliveu, wingu = self:firstToUpper(alivesname), self:firstToUpper(wingname)
 							local strtst , endstr = string.find(aliveu,wingu)
 							if endstr == nil then
 								endstr = strtst
@@ -384,15 +419,15 @@ $On Game Init: [
 									endstr = 1
 								end
 							end
-							local snum = tonumber(string.sub(alivesname,endstr+2,#alivesname))
+							local snum = tonumber(string.sub(alivesname, endstr+2, #alivesname))
 							while snum > wmax do
 								snum = snum-wmax
 							end
 							--now replace name
 							--first make it if it doesn't exist
 							if wing[snum] == nil then
-								local sclass = tostring(ship.Class.Type.Name) or "fighter"
-								self.winglist[wingname][snum] = {name=alivesname,hp=100,class=sclass}
+								local class = self:ClasstoNumber(alivesname)
+								self.winglist[wingname][snum] = {name=alivesname, hp=100, class=class, status=0}
 							end
 							--or replace if it does exist
 							if alivesname ~= wing[snum].name then
@@ -407,7 +442,9 @@ $On Game Init: [
 								if not ispresent and not mn.evaluateSEXP("( is-in-mission !"..wing[snum].name.."! )") then
 									local sclass = tostring(ship.Class.Type.Name) or "fighter"
 									wing[snum].name = alivesname
-									wing[snum].class = sclass
+									local class = self:ClasstoNumber(alivesname)
+									wing[snum].class = class
+									wing[snum].status = 0
 								end
 							end
 						end
@@ -417,7 +454,7 @@ $On Game Init: [
 				--draw wingname, also accounts for '#' in wingnames
 				if isplayergaugeon then 
 					gr.setColor(r, g, b, int)
-					local shortwname = SubfromHash(wingname)
+					local shortwname = self:SubfromHash(wingname)
 					local wnx = xstart-(gr.getStringWidth(shortwname)/2)
 					local sy = ystart+alldheight
 					if style == "grid" then --if in grid we want all wingnames to be left aligned, not centered
@@ -435,23 +472,46 @@ $On Game Init: [
 					if ship ~= nil and sname ~= nil then
 						local xs, ys = xstart+dotlocs[i][1], ystart+dotlocs[i][2]
 						gr.setLineWidth(2)
-						local iconfull = true
-						local isalive = true
-
-						--draw for in-mission
-						if mn.evaluateSEXP("( is-in-mission !"..sname.."! )") then
-							local mnship = mn.Ships[tostring(sname)]
-							ship.hp = mnship.HitpointsLeft / mnship.HitpointsMax or 1 --remember this is a global
+						local iconfull
+						local isalive
+						
+						--determine status			
+						if wing[i].status == self.statuses.notarrived then
+							if mn.evaluateSEXP("( is-in-mission !"..sname.."! )") then
+								wing[i].status = self.statuses.inmission
+							end
 						end
+						--[[
+						if wing[i].status == self.statuses.inmission then 
+							if ship.hp <=0 or mn.evaluateSEXP("( is-destroyed-delay 0 !"..sname.."! )") then
+								wing[i].status = self.statuses.destroyed
+							end
+							if mn.evaluateSEXP("( has-departed-delay 0 !"..sname.."! )") then
+								wing[i].status = self.statuses.departed
+							end								
+						end
+						--]]
+						
+						--draw for in-mission
+						local stat = wing[i].status
+						if stat == self.statuses.inmission then
+							isalive = true
+							iconfull = true
+							local mnship = mn.Ships[tostring(sname)]
+							if mnship ~= nil and mnship:isValid() then
+								ship.hp = mnship.HitpointsLeft / mnship.HitpointsMax or 1 --remember this is a global
+							end
+						end						
 						--draw for destroyed delay
-						if mn.evaluateSEXP("( is-destroyed-delay 0 !"..sname.."! )") or ship.hp <=0 then
+						if stat == self.statuses.destroyed then
 							isalive = false
 							iconfull = false
 						end
 						--draw for departed
-						if mn.evaluateSEXP("( has-departed-delay 0 !"..sname.."! )") then
+						if stat == self.statuses.departed then
+							isalive = true
 							iconfull = false
-						end
+						end						
 
 						--set line and circle color and draws it all
 						if isplayergaugeon then 
@@ -461,10 +521,10 @@ $On Game Init: [
 								local lpercent = 0
 								if ship.hp >= lcut then
 									lpercent = 1-(1-ship.hp)*(1/lcut)
-									icl = ColorMixer(green,orange,lpercent)
+									icl = self:ColorMixer(green,orange,lpercent)
 								else
 									lpercent = 1-(lcut-ship.hp)*(1/lcut)
-									icl = ColorMixer(orange,red,lpercent)
+									icl = self:ColorMixer(orange,red,lpercent)
 								end
 								--set color					
 								gr.setColor(icl[1], icl[2], icl[3], icl[4])
@@ -474,7 +534,7 @@ $On Game Init: [
 							
 							--draw rest of icon
 							local linew = dsize
-							if self.isbombdifferent and string.find(ship.class,"omb")~=nil then
+							if self.isbombdifferent and ship.class == 2 then
 								local rsize = dsize*0.80
 								local lx1 = xs-rsize
 								local lx2 = xs+rsize
@@ -520,7 +580,7 @@ $On Game Init: [
 				local wings = mn.Wings
 				if wings ~= nil then 
 					if wings[1]:isValid() then 
-						self.winglist = GetWingList() or {}
+						self.winglist = self:GetWingList() or {}
 						
 						--get longest wingname from starting wingnames
 						if #self.winglist > 0 then
@@ -529,8 +589,8 @@ $On Game Init: [
 							self.maxwidth = math.max(gnamewidth, minstrwidth) --also in pixels
 							self.maxstr = gr.getStringWidth(self.winglist[1]) --also in pixels
 							--find largest width
-							for i,v in ipairs(self.winglist) do --using ipairs will only use the wingnames that are listed by number keys, not the wing tables listed by string wingname keys 
-								local wname = SubfromHash(v)
+							for _,v in ipairs(self.winglist) do --using ipairs will only use the wingnames that are listed by number keys, not the wing tables listed by string wingname keys 
+								local wname = self:SubfromHash(v)
 								local str_pixwidth = gr.getStringWidth(wname)
 								if str_pixwidth > self.maxstr then
 									self.maxstr = str_pixwidth
@@ -714,6 +774,23 @@ $On HUD Draw: [
 		if not CustomWingGauge.RTT.isactive or ( CustomWingGauge.RTT.isactive and gr.hasViewmode(VM_CHASE) ) then
 			CustomWingGauge:Draw("onframe", true)
 		end
+	end
+]
+
+$On Ship Depart: [
+	--only valid for ships, gets ship handle
+	local hs = hv.Ship
+	if CustomWingGauge.isactive and hs ~= nil and hs:isValid() and mn.getMissionTime() > 0.1 then
+		local hvship = tostring(hs)
+		CustomWingGauge:UpdateWingmenStatus(hvship, CustomWingGauge.statuses.departed)
+	end
+]
+$On Death: [
+	--only valid for ships, gets object handle
+	local hs = hv.Self
+	if CustomWingGauge.isactive and hs ~= nil and hs:isValid() and mn.getMissionTime() > 0.1 then
+		local hvship = tostring(hs)
+		CustomWingGauge:UpdateWingmenStatus(hvship, CustomWingGauge.statuses.destroyed)
 	end
 ]
 
