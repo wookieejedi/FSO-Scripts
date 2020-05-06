@@ -1,8 +1,8 @@
 #Lua SEXPs
 
-$Operator: Add-Object-Role
+$Operator: add-object-role
 $Category: Change
-$Subcategory: LUA-Script_Action
+$Subcategory: LUA-Action
 $Minimum Arguments: 1
 $Maximum Arguments: 2
 $Return Type: Nothing
@@ -11,18 +11,18 @@ $Parameter:
 	+Description: Object to add to the object role gauge.
 	+Type: String
 $Parameter: 
-	+Description: Wing role description.
+	+Description: Object role description.
 	+Type: String
 	
-$Operator: Remove-Object-Role
+$Operator: remove-object-role
 $Category: Change
-$Subcategory: LUA-Script_Action
+$Subcategory: LUA-Action
 $Minimum Arguments: 1
 $Maximum Arguments: 1
 $Return Type: Nothing
 $Description: Removes the specified object from the list of object roles displayed.
 $Parameter: 
-	+Description: Object to add to the object role gauge.
+	+Description: Object to remove from the object role gauge.
 	+Type: String
 	
 #End
