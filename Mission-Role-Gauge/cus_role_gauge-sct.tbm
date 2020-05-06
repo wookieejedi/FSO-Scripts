@@ -13,7 +13,7 @@ $On Game Init: [
 
 	--Position
 	--To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl: 
-	--Note this custom gauge only has three size scales 
+	--Note this custom gauge only has three size scales (<= 1024 width, 1024 < width <= 3200, and > 3200)
 	--Also note that since this gauge dynamically changes in width and height two additional options for position are available:
 	--Object_Info_Help.start_point states where to start drawing the gauge. 
 		--Options for x include "left", "middle", and "right"
@@ -37,8 +37,8 @@ $On Game Init: [
 	--Each value can be an integer index or font file name listed in fonts.tbl.
 	--If the font specific does not exist, the gauge will use the respective font listed in fonts.tbl.
 	--For reference font 1 is medium size, font 2 is large size, and font 3 is small size 
-	--If the player's screen is greater than 3000 pixels the gauge will use the high_resolution font
-	--If the player's screen is less than 1024 pixels the gauge will use the low_resolution font
+	--If the player's screen is > 3200 pixels the gauge will use the high_resolution font
+	--If the player's screen is <= 1024 pixels the gauge will use the low_resolution font
 	Object_Info_Help.fonts = {medium_resolution = 4, low_resolution = 6, high_resolution = 5}
 
 	--Gauge Title
