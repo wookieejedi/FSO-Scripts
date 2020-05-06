@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 	
-	--Version 2.8, released on February 07, 2020 by wookieejedi
+	--Version 2.9, released on May 06, 2020 by wookieejedi
 	CustomWingGauge = {} --makes a global variable! This is the only global variable this script creates. 
 	
 	---------------------------------
@@ -28,15 +28,18 @@ $On Game Init: [
 	
 	-----------------
 	--To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl: 
-	--Note this custom gauge does not scale in size
+	--Note this custom gauge only has three size scales (<= 1024 width, 1024 < width <= 3200, and > 3200)
 	CustomWingGauge.origin = {x=0.88, y=0.3}
 	CustomWingGauge.offset = {x=0, y=0}
 	
 	-----------------	
-	--To set custom fonts for the gauge to use change the values of 'default' and 'low_resolution':
+	--To set custom fonts for the gauge to use change the values of 'medium_resolution' and 'low_resolution' and 'high_resolution:
 	--Each value can be an integer index or font file name listed in fonts.tbl.
-	--If the font specific does not exist, the gauge will use the first font listed in fonts.tbl.
-	CustomWingGauge.fonts = {default=4, low_resolution=6}
+	--If the font specific does not exist, the gauge will use the respective font listed in fonts.tbl.
+	--For reference font 1 is medium size, font 2 is large size, and font 3 is small size 
+	--If the player's screen is > 3200 pixels the gauge will use the high_resolution font
+	--If the player's screen is <= 1024 pixels the gauge will use the low_resolution font
+	CustomWingGauge.fonts = {medium_resolution = 4, low_resolution = 6, high_resolution = 5}
 	
 	-----------------
 	--To use gray-scale dots instead of red and green wingmen dots set: 
@@ -231,47 +234,80 @@ $On Game Init: [
 		end 
 
 		local idot = self.basecolor[4]	--((255-self.basecolor[4])*0.8)
-		local green = {0,120,0,idot}
-		local orange = {212,91,18,idot}
-		local red = {126,6,6,idot}
+		local green = {0, 120, 0, idot}
+		local orange = {212, 91, 18, idot}
+		local red = {126, 6, 6, idot}
 		--local grey = {105, 105, 105, idot}
 		--local dgray = {35,35,35,idot}
 		if self.isgrayscaled then
 			green = {200,200,200,255} --white-ish gray
 			red = {35,35,35,255}
 		end
-		--size of wingmen dots
-		local dsize = 5
-		--font size
-		local fonttype = "default"
-		local islowres = false 
-		if gr.getScreenWidth() < 1024 or gr.getScreenHeight() < 768 then 
-			fonttype = "low_resolution"
-			dsize = 3
-			islowres = true
-		end 
-		local font = self.fonts[fonttype]		
-		if gr.Fonts[font] ~= nil then --if this is a valid font 
-			gr.CurrentFont = gr.Fonts[font] --1 or 4 is medium, 2 or 5 is large, 3 or 6 is small
-		else --if not a valid font we default to the first font specified in fonts.tbl 
-			gr.CurrentFont = gr.Fonts[1]
-			dsize = 5
-			if islowres and gr.Fonts[3] ~= nil then
-				gr.CurrentFont = gr.Fonts[3]
-			end 
-		end
-		--ba.print("Selected_font_is: "..font.." ...\n")
-		local slineh = gr.CurrentFont.Height
+	
+		--stepwise scale based on resolution
+		local buf
+		local rect_lwidth_big
+		local rect_lwidth_small
+		local fonttype
+		local dsize
 		
+		local res = {x = gr.getScreenWidth(), y = gr.getScreenHeight()}
+		
+		--rememeber if gauge ~= nil then we are in the cockpit and have to use the medium_resolution so it fits on the RTT gauge size
+			
+		--if high res
+		if res.x > 3200 and gauge == nil then 
+			buf = 8
+			rect_lwidth_big = 4
+			rect_lwidth_small = 2
+			fonttype = "high_resolution"
+			dsize = 9
+		--if low res
+		elseif res.x < 1024 and gauge == nil then
+			buf = 2
+			rect_lwidth_big = 1
+			rect_lwidth_small = 1
+			fonttype = "low_resolution"
+		--then must be gauge or medium res
+		else
+			buf = 4
+			rect_lwidth_big = 2
+			rect_lwidth_small = 1
+			fonttype = "medium_resolution"
+			dsize = 5
+		end
+		
+		--set and check font
+		local font = Object_Info_Help.fonts[fonttype] or 1 --add this 1 in case user remove the option entry somehow 	
+		
+		--if this font doesn't actually exist then find it's closest match
+		local font_conversion = {medium_resolution=1, high_resolution=2, low_resolution=3}
+		if gr.Fonts[font] == nil then 
+			font = font_conversion[fonttype]
+		end 
+		
+		--double check to make sure this exists 
+		--if not then force it to be 1 (we really shouldn't get to this point)
+		if gr.Fonts[font] == nil then 
+			font = 1
+		end
+		
+		--now set the font
+		gr.CurrentFont = gr.Fonts[font]
+		
+		--set all dynamicly sized variables
+		
+		--get line sizes 
+		local slineh = gr.CurrentFont.Height
+
+		local dspace = dsize*2.2 -- + math.round(dsize*1.5)		
+		
+		--get style type
 		if not (self.style == "default" or self.style == "grid") then
 			self.style = "default"
 		end 
 		local style = self.style
-		local dspace = dsize*2.2 -- + math.round(dsize*1.5)
-		local buf = 4 --buffer pixels around rectangle
-		if islowres then 
-			buf = 2
-		end 		
+		
 		local gaugename = "Wingmen"
 		local gnamewidth = gr.getStringWidth(gaugename)+buf*3
 		local configs = {
@@ -289,7 +325,7 @@ $On Game Init: [
 				mindwidth = gnamewidth + 1*(dspace+dsize) + 2*buf,
 				extrabuf_x = buf*3 + 6*(dspace+dsize),
 				extra_y = slineh + buf/1.7,
-				canvas_size = {x=(gnamewidth+ 5*(dspace+dsize) + buf), y=(7*(slineh + buf/1.7))}
+				canvas_size = {x=(gnamewidth + 5*(dspace+dsize) + buf), y=(7*(slineh + buf/1.7))}
 			}
 		}
 		local dotlocs = configs[style].dotoffsets
@@ -471,7 +507,7 @@ $On Game Init: [
 		
 					if ship ~= nil and sname ~= nil then
 						local xs, ys = xstart+dotlocs[i][1], ystart+dotlocs[i][2]
-						gr.setLineWidth(2)
+						gr.setLineWidth(rect_lwidth_big)
 						local iconfull
 						local isalive
 						
@@ -549,7 +585,7 @@ $On Game Init: [
 								--draws inner line to show still alive, just departed
 								dr("drawLine", {xs, ys-linew, xs, ys+linew})
 							end
-							gr.setLineWidth(1)
+							gr.setLineWidth(rect_lwidth_small)
 						end
 					end
 				end
@@ -645,7 +681,6 @@ $On Game Init: [
 			end 
 			
 			--set rectangle coordinates
-			local res = { x = gr.getScreenWidth(), y = gr.getScreenHeight() }
 			local start_coor = {x=0, y=0}
 			if (self.RTT.use and gauge~=nil) then 
 				--x and y at 2,2 since drawing to gauge, that way thicker lines can be seen. If at 0,0 then gauge cuts off lines
@@ -677,7 +712,7 @@ $On Game Init: [
 					wingsdrawn = wingsdrawn + 1
 					if isplayergaugeon and style=="default" then 
 						gr.setColor(r,g,b,int)
-						gr.setLineWidth(1)
+						gr.setLineWidth(rect_lwidth_small)
 						dr("drawLine", {start_coor.x, yend, start_coor.x+maxwidth, yend})
 					end
 					isgaugeon = true
@@ -693,7 +728,7 @@ $On Game Init: [
 			--draw rectangle and Wings header
 			--draw big gauge rectangle
 			if isplayergaugeon then 
-				gr.setLineWidth(2)
+				gr.setLineWidth(rect_lwidth_small)
 				local bckgrdint = 0.3
 				--set to low intensity to draw background of gauge
 				gr.setColor(r, g, b, int*bckgrdint)
@@ -705,7 +740,7 @@ $On Game Init: [
 					finalyend = finalyend + buf
 				end 
 				dr("drawRectangle", {start_coor.x, start_coor.y, start_coor.x+maxwidth, finalyend, false})
-				gr.setLineWidth(1)
+				gr.setLineWidth(rect_lwidth_small)
 				dr("drawLine", {start_coor.x, y1, start_coor.x+maxwidth, y1})
 				--draw Wingmen header text, set highest intensity here
 				local ihtxt = 255-(0.8*(255-int))
