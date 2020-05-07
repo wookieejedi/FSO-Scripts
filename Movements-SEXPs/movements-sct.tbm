@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.3, released on January 01, 2020 by wookieejedi
+	--Version 1.4, released on May 07, 2020 by wookieejedi
 	--Description: custom sexps and functions that allow for much easier ship movements and rotations
 	--Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 	
@@ -659,18 +659,22 @@ $On Game Init: [
 	
 	end
 
-	function Movements:Set_Pos_Relative_to_Ship(name_to_set, targetname, xyz_tbl)
+	function Movements:Set_Pos_Relative_to_Ship(name_to_set, targetname, xyz_tbl, userelative)
 		
 		if type(xyz_tbl) ~= "table" then return end
 		if #xyz_tbl ~= 3 then return end
 		if type(name_to_set) ~= "string" or type(targetname) ~= "string" then return end
 		local x,y,z = xyz_tbl[1], xyz_tbl[2], xyz_tbl[3]
 		
-		mn.runSEXP(" ( set-object-position !"..name_to_set.."! ( get-object-x !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ( get-object-y !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ( get-object-z !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ) ")
+		if userelative == false then
+			mn.runSEXP("( set-object-position !"..name_to_set.."! ( + ( get-object-x !"..targetname.."! ) !"..x.."! ) ( + ( get-object-y !"..targetname.."! ) !"..y.."! ) ( + ( get-object-z !"..targetname.."! ) !"..z.."! ) )")
+		else
+			mn.runSEXP(" ( set-object-position !"..name_to_set.."! ( get-object-x !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ( get-object-y !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ( get-object-z !"..targetname.."! !<none>! !"..x.."! !"..y.."! !"..z.."! ) ) ")
+		end
 		
 	end
 
-	function Movements:Add_Wpts_trk_Ships(waypointpath_name, shiptarget_name, waypoint_i, offset_xyz, track_interval, track_distance)
+	function Movements:Add_Wpts_trk_Ships(waypointpath_name, shiptarget_name, waypoint_i, offset_xyz, track_interval, track_distance, userelative)
 		
 		--validity checks
 		if waypointpath_name == nil or shiptarget_name == nil then return end
@@ -717,6 +721,10 @@ $On Game Init: [
 		if not waypoint:isValid() then return end
 		local waypoint_name = self:WaypointName(waypointpath_name, waypoint_i)
 		
+		if type(userelative) ~= "boolean" then
+			userelative = true
+		end
+		
 		--add entry
 		local entry = {
 			waypoint_i = waypoint_i,
@@ -725,14 +733,15 @@ $On Game Init: [
 			offset_xyz = offset_xyz,
 			track_interval = track_interval,
 			time_last_check = mn.getMissionTime(),
-			track_distance = track_distance
+			track_distance = track_distance, 
+			userelative = userelative
 		}	
 		self.Active_Wpts_trk_Ships[waypoint_name] = entry		
 		
 		--set position if needed
 		local dis_wp_to_ship = waypoint.Position:getDistance(ship.Position)
 		if dis_wp_to_ship > track_distance then
-			self:Set_Pos_Relative_to_Ship(waypoint_name, shiptarget_name, offset_xyz)
+			self:Set_Pos_Relative_to_Ship(waypoint_name, shiptarget_name, offset_xyz, userelative)
 		end
 		
 		--update tracker variables
@@ -758,7 +767,7 @@ $On Game Init: [
 								--then only continue if target ship has moved far enough
 								local dis_wp_to_ship = wpoint.Position:getDistance(ship.Position)
 								if dis_wp_to_ship > v.track_distance then
-									self:Set_Pos_Relative_to_Ship(k_waypointname, v.shiptarget_name, v.offset_xyz)
+									self:Set_Pos_Relative_to_Ship(k_waypointname, v.shiptarget_name, v.offset_xyz, v.userelative)
 								end
 							end
 						end
@@ -782,7 +791,7 @@ $On Game Init: [
 		
 	end
 
-	mn.LuaSEXPs["add-waypoint-track-ship"].Action = function(shiptarget, waypointpath, waypoint_i, offset_x, offset_y, offset_z, track_interval, track_distance)
+	mn.LuaSEXPs["add-waypoint-track-ship"].Action = function(shiptarget, waypointpath, waypoint_i, offset_x, offset_y, offset_z, track_interval, track_distance, userelative)
 			
 		if waypointpath == nil or shiptarget == nil then return end
 		if not waypointpath:isValid() or not shiptarget:isValid() then return end
@@ -804,7 +813,7 @@ $On Game Init: [
 		
 		local xyz_tbl = {offset_x, offset_y, offset_z}
 		
-		Movements:Add_Wpts_trk_Ships(waypointpath.Name, shiptarget.Name, waypoint_i, xyz_tbl, track_interval, track_distance)
+		Movements:Add_Wpts_trk_Ships(waypointpath.Name, shiptarget.Name, waypoint_i, xyz_tbl, track_interval, track_distance, userelative)
 		
 	end
 
@@ -1240,7 +1249,7 @@ $On Game Init: [
 		return final
 	end
 
-	function Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h) --pbh should be in radians
+	function Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check) --pbh should be in radians
 		--higher level function that runs all the above functions
 		
 		--set defaults 
@@ -1284,12 +1293,12 @@ $On Game Init: [
 		local idle_pbh = {p=self:Chop(pbh_p), b=self:Chop(pbh_b), h=self:Chop(pbh_h)}
 		
 		--run waypoint track ship 
-		self:Add_Wpts_trk_Ships(waypointpath_name, ship_to_track_name, waypoint_i, offset_xyz, track_interval, track_distance)
+		self:Add_Wpts_trk_Ships(waypointpath_name, ship_to_track_name, waypoint_i, offset_xyz, track_interval, track_distance, userelative)
 		
 		--run ship track waypoint, include setting 
 		local track_distance_ship = -1 --so it uses default ship radius
 		--other defaults and validity checks are performed in function below
-		self:Add_Ships_trk_Wpts(ship_to_order_name, waypointpath_name, priority, track_interval, track_distance_ship, idle_pbh, ship_to_track_name)
+		self:Add_Ships_trk_Wpts(ship_to_order_name, waypointpath_name, priority, track_interval, track_distance_ship, idle_pbh, ship_to_track_name, continuous_pbh_check)
 		
 	end
 	
@@ -1310,7 +1319,7 @@ $On Game Init: [
 		
 	end
 
-	mn.LuaSEXPs["add-ai-goal-track-ship"].Action = function(ship_to_order, ship_to_track, waypointpath, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h)
+	mn.LuaSEXPs["add-ai-goal-track-ship"].Action = function(ship_to_order, ship_to_track, waypointpath, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check)
 		
 		if ship_to_order == nil or ship_to_track == nil or waypointpath == nil then return end
 		if not ship_to_order:isValid() or not ship_to_track:isValid() or not waypointpath:isValid() then return end
@@ -1335,7 +1344,7 @@ $On Game Init: [
 		
 		local waypoint_i = 1
 		
-		Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h)
+		Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check)
 		
 	end
 	
