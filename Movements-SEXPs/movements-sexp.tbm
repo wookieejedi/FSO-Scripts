@@ -168,7 +168,7 @@ $Operator: add-ai-goal-track-ship
 $Category: Change
 $Subcategory: LUA-Movements
 $Minimum Arguments: 3
-$Maximum Arguments: 12
+$Maximum Arguments: 13
 $Return Type: Nothing
 $Description: Adds a custom ai-goal for a ship to track another ship. The ordered ship will move to follow the target ship and then once stopped will rotate to the target ship orientation, or a variant to that orientation. This is a higher level sexp that runs 'add-waypoint-track-ship' with 'add-ai-goal-track-waypoint' and 'set-idle-track-orientation'. This sexp uses a time interval of 1 second for updating positional data and a track distance of the radius of the ship following the track order. Note, use a waypoint path with only 1 waypoint. The order 'clear-goals' will also stop this custom order. Also the ship will continually maintain the specified orientation when at rest. 
 $Parameter: 
@@ -206,7 +206,10 @@ $Parameter:
 	+Type: Boolean	
 $Parameter:
 	+Description: Boolean if the ship should actively mantain this orientation when at rest. Default is true. Keeping this value to true is useful for having a ship mantain an orientation relative to another ship, even if the target ship rotates.  
-	+Type: Boolean	
+	+Type: Boolean
+$Parameter: 
+	+Description: Priority for the automatic play-dead-persistent order issued when rotating to an idle orientation. Default is 200. If set to a negative value then no play-dead-order-persistent order is issued. If set, the play-dead-persistent order will be removed automatically when the effect is over. 
+	+Type: Number
 
 $Operator: remove-ai-goal-track-ship
 $Category: Change

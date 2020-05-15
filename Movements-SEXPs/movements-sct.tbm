@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.4, released on May 07, 2020 by wookieejedi
+	--Version 1.4, released on May 14, 2020 by wookieejedi
 	--Description: custom sexps and functions that allow for much easier ship movements and rotations
 	--Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 	
@@ -400,12 +400,12 @@ $On Game Init: [
 			play_dead_PR = 200
 		end
 		
-		--cap at 200 to avoid errors too
+		--cap at 200 to avoid errors too, recall there is no floor
 		if play_dead_PR > 200 then
 			play_dead_PR = 200 
 		end
 		
-		--run play dead if needed
+		--run play dead if needed (ie not negative value)
 		if play_dead_PR >= 0 then
 			mn.runSEXP("( add-goal !"..shipname.."! ( ai-play-dead-persistent !"..play_dead_PR.."! ) )")
 		end
@@ -871,7 +871,7 @@ $On Game Init: [
 		
 	end
 
-	function Movements:Add_Ships_trk_Wpts(shipname, waypoint_path_name, priority, track_interval, track_distance, input_final_pbh, final_pbh_target_name, continuous_pbh_check) --input_final_pbh should be {p=0,b=0,h=0} in radians
+	function Movements:Add_Ships_trk_Wpts(shipname, waypoint_path_name, priority, track_interval, track_distance, input_final_pbh, final_pbh_target_name, continuous_pbh_check, play_dead_PR) --input_final_pbh should be {p=0,b=0,h=0} in radians
 		
 		--validity checks
 		if shipname == nil then return end
@@ -890,6 +890,17 @@ $On Game Init: [
 		if priority < 0 then
 			priority = 0
 		end
+		
+		--set play_dead_PR priority, default is the same priority as this order
+		--recall this one CAN be negative and if so it disables the play dead persistent
+		if type(play_dead_PR) ~= "number" then
+			play_dead_PR = priority
+		end
+		--cap if too high
+		if play_dead_PR > 200 then
+			play_dead_PR = 200
+		end
+		--no floor since it can be negative
 		
 		local mtime = mn.getMissionTime()
 		
@@ -958,6 +969,7 @@ $On Game Init: [
 			waypoint_path_name = waypoint_path_name,
 			num_waypoints = num_waypoints,
 			priority = priority,
+			play_dead_PR = play_dead_PR,
 			track_interval = track_interval,
 			time_last_check = mtime,
 			previous_waypoint_location = previous_waypoint_location,
@@ -989,7 +1001,7 @@ $On Game Init: [
 		
 		if entry ~= nil then
 			--remove any play dead order 
-			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.priority .."! ) )")
+			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
 			--remove any waypoints once order
 			--ba.print("entry.shipname: "..entry.shipname..", entry.waypoint_path_name: "..entry.waypoint_path_name..", entry.priority "..entry.priority.."...\n")
 			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-waypoints-once !".. entry.waypoint_path_name .."! !".. entry.priority .."! ) )")
@@ -1019,7 +1031,7 @@ $On Game Init: [
 			--calculate how long until it stops
 
 			local rotate_time = -1 --for default rotate time
-			self:Add_Rotation(shipname, entry.final_pbh, rotate_delay, rotate_time, entry.priority, entry.final_pbh_target_name)
+			self:Add_Rotation(shipname, entry.final_pbh, rotate_delay, rotate_time, entry.play_dead_PR, entry.final_pbh_target_name)
 		--if not valid final orientation then don't run rotate-to-orientation
 		end
 		
@@ -1027,7 +1039,7 @@ $On Game Init: [
 		entry.is_running_waypoints_once = false
 		
 		--set play dead persistent order 
-		mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.priority .."! ) )")
+		mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
 		
 		--save last known waypoint location
 		--using last known location of last waypoint helps mitigate effects of the ship over-shooting the final waypoint
@@ -1086,7 +1098,7 @@ $On Game Init: [
 									if self:ShouldUpdate_PBH({p=so.p, b=so.b, h=so.h}, fo) then
 										local rotate_time = -1 --for default rotate time
 										local rotate_delay = 1
-										self:Add_Rotation(v.shipname, v.final_pbh, rotate_delay, rotate_time, v.priority, v.final_pbh_target_name)
+										self:Add_Rotation(v.shipname, v.final_pbh, rotate_delay, rotate_time, v.play_dead_PR, v.final_pbh_target_name)
 										--^ add rotation updates the previous pitch, bank, heading of any ship in the Active_Ships_trk_Wpts
 									end
 								end
@@ -1105,7 +1117,7 @@ $On Game Init: [
 									--add goal and set to tracking
 									if dis_wp_previous_to_wp > v.track_distance then
 										--remove play dead persistent
-										mn.runSEXP("( remove-goal !" .. v.shipname .."! ( ai-play-dead-persistent !".. v.priority .."! ) )")
+										mn.runSEXP("( remove-goal !" .. v.shipname .."! ( ai-play-dead-persistent !".. v.play_dead_PR .."! ) )")
 										--start waypoints once
 										mn.runSEXP("( add-goal !"..v.shipname.."! ( ai-waypoints-once !"..v.waypoint_path_name.."! !"..v.priority.."! ))")
 										v.is_running_waypoints_once = true
@@ -1122,6 +1134,9 @@ $On Game Init: [
 
 	mn.LuaSEXPs["add-ai-goal-track-waypoint"].Action = function(ship, waypointpath, priority, track_interval, track_distance)
 		
+		--recall this doesn't take into account target ship, so nothing about the orientation, continuous_pbh_check, or play_dead_PR is set here. 
+		--this should only be used for waypoints not related to ships, if more is needed use the actual function
+		
 		if ship ~= nil and ship:isValid() then
 		
 			--add entry
@@ -1134,7 +1149,7 @@ $On Game Init: [
 			--function takes a waypoint_path_name as string but this sexp takes the entire waypoint_path object
 			local waypointpath_name = waypointpath.Name
 			
-			Movements:Add_Ships_trk_Wpts(ship.Name, waypointpath_name, priority, track_interval, track_distance)
+			Movements:Add_Ships_trk_Wpts(ship.Name, waypointpath_name, priority, track_interval, track_distance) --recall target is not used in this sexp, so it won't be used
 		end
 		
 	end
@@ -1249,8 +1264,9 @@ $On Game Init: [
 		return final
 	end
 
-	function Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check) --pbh should be in radians
+	function Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check, play_dead_PR) --pbh should be in radians
 		--higher level function that runs all the above functions
+		--recall this has access to some other arguments that the individual lower level sexps do not such as userelative, continuous_pbh_check, and play_dead_PR
 		
 		--set defaults 
 		if type(ship_to_order_name) ~= "string" then return end
@@ -1298,7 +1314,7 @@ $On Game Init: [
 		--run ship track waypoint, include setting 
 		local track_distance_ship = -1 --so it uses default ship radius
 		--other defaults and validity checks are performed in function below
-		self:Add_Ships_trk_Wpts(ship_to_order_name, waypointpath_name, priority, track_interval, track_distance_ship, idle_pbh, ship_to_track_name, continuous_pbh_check)
+		self:Add_Ships_trk_Wpts(ship_to_order_name, waypointpath_name, priority, track_interval, track_distance_ship, idle_pbh, ship_to_track_name, continuous_pbh_check, play_dead_PR)
 		
 	end
 	
@@ -1319,7 +1335,7 @@ $On Game Init: [
 		
 	end
 
-	mn.LuaSEXPs["add-ai-goal-track-ship"].Action = function(ship_to_order, ship_to_track, waypointpath, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check)
+	mn.LuaSEXPs["add-ai-goal-track-ship"].Action = function(ship_to_order, ship_to_track, waypointpath, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check, play_dead_PR)
 		
 		if ship_to_order == nil or ship_to_track == nil or waypointpath == nil then return end
 		if not ship_to_order:isValid() or not ship_to_track:isValid() or not waypointpath:isValid() then return end
@@ -1344,7 +1360,7 @@ $On Game Init: [
 		
 		local waypoint_i = 1
 		
-		Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check)
+		Movements:Add_Ship_trk_Ship(ship_to_order_name, ship_to_track_name, waypointpath_name, waypoint_i, priority, off_x, off_y, off_z, pbh_p, pbh_b, pbh_h, userelative, continuous_pbh_check, play_dead_PR)
 		
 	end
 	
