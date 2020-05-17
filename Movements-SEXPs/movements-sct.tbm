@@ -1,10 +1,18 @@
+#Global Hooks
+
+$Simulation: [
+	Movements:OnSimulation()
+]
+
+#End
+
 #Conditional Hooks
 
 $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.4, released on May 14, 2020 by wookieejedi
+	--Version 1.5, released on May 17, 2020 by wookieejedi
 	--Description: custom sexps and functions that allow for much easier ship movements and rotations
 	--Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 	
@@ -70,12 +78,23 @@ $On Game Init: [
 	end
 
 	function Movements:Get_safe_number(num, iswholenumber, onlypositive, abovezero) --defaults are all true
+
 		if type(num) ~= "number" then
 			num = 0
 		end
-		iswholenumber = iswholenumber or true
-		onlypositive = onlypositive or true
-		abovezero = abovezero or true
+		
+		--DO NOT use or true to set defaults since it make make it true even if setting it to false (ie false or true = true)
+		
+		if iswholenumber == nil then 
+			iswholenumber = true
+		end
+		if onlypositive == nil then 
+			onlypositive = true
+		end
+		if abovezero == nil then 
+			abovezero = true
+		end
+		
 		if iswholenumber then
 			num = self:Round(num)
 		end
@@ -83,9 +102,11 @@ $On Game Init: [
 			num = 0
 		end
 		if abovezero and num <= 0 then
-			abovezero = 1
+			num = 1
 		end
+
 		return num
+
 	end
 
 	function Movements:Chop(inputnumber)
@@ -353,8 +374,10 @@ $On Game Init: [
 							angular_distance = 3.141592
 						end
 						local angular_velocity = vels[i] --radians/sec
-						angular_velocity = self:Get_safe_number(angular_velocity, false, false, true) --iswholenumber, onlypositive, abovezero defaults are true
 						--ba.print("Movements Status: angular_velocity of radians/sec "..angular_velocity.." for ship "..shipname.."...\n")
+						--make sure we are NOT dividing by 0
+						angular_velocity = self:Get_safe_number(angular_velocity, false, false, true) --iswholenumber, onlypositive, abovezero
+						--ba.print("Movements Status: safe angular_velocity of radians/sec "..angular_velocity.." for ship "..shipname.."...\n")
 						
 						local l_time = angular_distance/angular_velocity
 						--ba.print("Movements Status: Rotation duration of sec "..l_time.." for ship "..shipname.."...\n")
@@ -381,7 +404,7 @@ $On Game Init: [
 			end
 		end
 		
-		--set times
+		--set times, and double check default determined time for rotation
 		local start_time = time_delay + current_time
 		if type(time_for_rotation) ~= "number" then
 			time_for_rotation = 0
@@ -395,7 +418,6 @@ $On Game Init: [
 		
 		--run play dead order if needed, default is pr of 200
 		--negative value turns off play dead order
-		play_dead_PR = play_dead_PR or 200
 		if type(play_dead_PR) ~= "number" then
 			play_dead_PR = 200
 		end
@@ -456,6 +478,10 @@ $On Game Init: [
 			
 			--local ship1 = mn.Ships[v.shipname]
 			--ba.print("checking ship oreintation 1 "..v.shipname.." to p,b,h "..math.deg(ship1.Orientation.p)..", "..math.deg(ship1.Orientation.b)..", ".. math.deg(ship1.Orientation.h).."...\n")
+			
+			--print("Start_time: "..v.start_time.."...\n")
+			--print("End_time: "..v.end_time.."...\n")
+			--print("Mission_time: "..mtime.."...\n")
 			
 			if mtime >= v.start_time and v.shipname ~= nil then
 				local percent_done = (mtime - v.start_time) / (v.end_time - v.start_time)
@@ -846,7 +872,7 @@ $On Game Init: [
 				local sphycis = ship.Physics
 				if sphycis ~= nil then
 					local current_speed_z = sphycis:getForwardSpeed()
-					current_speed_z = self:Get_safe_number(current_speed_z) --iswholenumber, onlypositive, abovezero defaults are true
+					current_speed_z = self:Get_safe_number(current_speed_z) --iswholenumber, onlypositive, abovezero all default to true
 					
 					local max_speed_z = sphycis.VelocityMax[3]
 					max_speed_z = self:Get_safe_number(max_speed_z)
@@ -1208,7 +1234,9 @@ $On Game Init: [
 		
 		if ship ~= nil and ship:isValid() then
 			--if target ship is specified only run if it's in mission
-			usetargetship = usetargetship or false
+			if usetargetship == nil then
+				usetargetship = false
+			end
 			local taretship_name
 			if usetargetship then --if false then it's nil
 				if input_targetship == nil then return end
@@ -1240,7 +1268,9 @@ $On Game Init: [
 
 	function Movements:RandomRadius(shipname, allownegative) --gets a random value that is between the radius and diameter of a ship with a - or + sign
 		local final = 100
-		allownegative = allownegative or true
+		if allownegative == nil then
+			allownegative = true
+		end
 		if shipname ~= nil then
 			local ship = mn.Ships[shipname]
 			if ship ~= nil and ship:isValid() then
@@ -1410,6 +1440,27 @@ $On Game Init: [
 		
 	end
 
+	function Movements:OnSimulation()
+		local current_time = mn.getMissionTime()
+		if current_time > 0.1 then
+			--update rotations --now done on Simulation
+			if self.Active_Rotations_Sum > 0 then
+				self:Run_Rotation()
+			end
+			--update current time and check waypoints
+			if current_time > self.Time_Previous_Check + self.G_Time_Check_Interval then
+				self.Time_Previous_Check = current_time
+				--check waypoints tracking ships
+				if self.Active_Wpts_trk_Ships_Sum > 0 then
+					self:Check_Wpts_trk_Ships()
+				end 
+				--check ships tracking waypoints
+				if self.Active_Ships_trk_Wpts_Sum > 0 then
+					self:Check_Ships_trk_Wpts()
+				end
+			end
+		end	
+	end
 	
 ]
 
@@ -1418,33 +1469,6 @@ $State: GS_STATE_GAME_PLAY
 
 $On Gameplay Start: [
 	Movements:Initiate()
-]
-
-$On Frame: [
-	local current_time = mn.getMissionTime()
-	if current_time > 0.1 then
-		if Movements.Active_Rotations_Sum > 0 then
-			Movements:Run_Rotation()
-		end
-		--update current time and check waypoints
-		if current_time > Movements.Time_Previous_Check + Movements.G_Time_Check_Interval then
-			Movements.Time_Previous_Check = current_time
-			--check waypoints tracking ships
-			if Movements.Active_Wpts_trk_Ships_Sum > 0 then
-				Movements:Check_Wpts_trk_Ships()
-			end 
-			--check ships tracking waypoints
-			if Movements.Active_Ships_trk_Wpts_Sum > 0 then
-				Movements:Check_Ships_trk_Wpts()
-			end
-		end
-		--[[
-		local pbh_bs_1 = mn.Ships["BS1"].Orientation
-		local pbh_bs_2 = mn.Ships["BS 2"].Orientation
-		gr.drawString("pbh_bs_1: "..math.deg(pbh_bs_1.p)..", "..pbh_bs_1.b..", "..pbh_bs_1.h)
-		gr.drawString("pbh_bs_2: "..pbh_bs_2.p..", "..pbh_bs_2.b..", "..pbh_bs_2.h)
-		--]]
-	end
 ]
 
 $On Waypoints Done: [
