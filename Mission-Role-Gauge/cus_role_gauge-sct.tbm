@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 0.3, released on May 6, 2020 by wookieejedi
+	--Version 0.4, released on June 17, 2020 by wookieejedi
 	Object_Info_Help = {} --makes a global variable! This is the only global variable this script creates. 
 	
 	---------------------------------
