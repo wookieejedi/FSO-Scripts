@@ -409,6 +409,7 @@ $On Game Init: [
 			if self.Centered ~= false then
 				self.Centered = false
 			end
+		end
 	end
 
 ]
