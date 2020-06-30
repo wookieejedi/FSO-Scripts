@@ -159,11 +159,13 @@ $On Game Init: [
 		local y = io.getMouseY()
 		if x > self.elements.toggle.x1 and x < self.elements.toggle.x2 and y > self.elements.toggle.y1 and y < self.elements.toggle.y2 then
 			self.Active = -self.Active
+			ad.playInterfaceSoundByName("0")
 			self.save_needed = true
 		end
 		--removed `self.Active > 0 and` condition becuase in-game toggle was added 
 		if x > self.elements.invert.x1 and x < self.elements.invert.x2 and y > self.elements.invert.y1 and y < self.elements.invert.y2 then
 			self.Invert = -self.Invert
+			ad.playInterfaceSoundByName("0")
 			self.save_needed = true
 		end	
 	end
@@ -311,10 +313,8 @@ $On Game Init: [
 			local mouse_center_y = gr.getScreenHeight() / 2
 
 			--recall that forcing the cursor to a position only works if the cursor is shown, so show it
-			if not self.CursorShown then
-				io.setCursorHidden(false, true)
-				self.CursorShown = true
-			end
+			--yes this is a bit more costly, but it is so much more elegant and actually works
+			io.setCursorHidden(false, true)
 			
 			--note that LUA_FULL_CONTROLS stops the io.MouseControlStatus from working, so no need to turn it to false
 			if not self.LUAControlling then 
@@ -356,15 +356,14 @@ $On Game Init: [
 			
 			self:DrawArrows(x, y)
 
+			--hide it again so we don't see it
+			--yes this is a bit more costly, but it is so much more elegant and actually works
+			io.setCursorHidden(true, true)
+		
 		--if we can't use the mouse joystick make sure we save that we need to center it again before turning it back on
 		else
 			--reset lua controls
 			self:UnsetLUAControls()
-			--hide the cursor if needed
-			if self.CursorShown then
-				io.setCursorHidden(true, true)
-				self.CursorShown = false
-			end
 			--set centering value if needed
 			if self.Centered ~= false then
 				self.Centered = false
@@ -410,10 +409,6 @@ $On Game Init: [
 			if self.Centered ~= false then
 				self.Centered = false
 			end
-			if self.CursorShown ~= false then
-				self.CursorShown = false
-			end
-		end
 	end
 
 ]
@@ -445,7 +440,6 @@ $State: GS_STATE_GAME_PLAY
 $On State Start: [
 	JoyMouse.Toggleable = true
 	JoyMouse.Centered = false
-	JoyMouse.CursorShown = false
 ]
 
 $On Frame: [
@@ -459,7 +453,6 @@ $On Key Pressed: [
 $On State End: [
 	JoyMouse.Toggleable = false
 	JoyMouse.Centered = false
-	JoyMouse.CursorShown = true
 	JoyMouse:UnsetLUAControls()
 ]
 
@@ -467,7 +460,6 @@ $Action: Free Look View
 $On Action: [
 	JoyMouse.Toggleable = false
 	JoyMouse.Centered = false
-	--do not do anything with show cursor here
 ]
 $On Action Stopped: [
 	JoyMouse.Toggleable = true
