@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 	
-	--Version 2.9, released on May 06, 2020 by wookieejedi
+	--Version 3.0, released on August 27, 2020 by wookieejedi
 	CustomWingGauge = {} --makes a global variable! This is the only global variable this script creates. 
 	
 	---------------------------------
@@ -24,12 +24,12 @@ $On Game Init: [
 	--CustomWingGauge.style = "grid"
 	--if using 'grid', it is recommended to set the position, CustomWingGauge.origin = {x=0.88, y=0.3}
 	--if using 'default', it is recommended to set the position, CustomWingGauge.origin = {x=0.935, y=0.2}
-	CustomWingGauge.style = "grid"
+	CustomWingGauge.style = "default"
 	
 	-----------------
 	--To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl: 
 	--Note this custom gauge only has three size scales (<= 1024 width, 1024 < width <= 3200, and > 3200)
-	CustomWingGauge.origin = {x=0.88, y=0.3}
+	CustomWingGauge.origin = {x=0.935, y=0.2}
 	CustomWingGauge.offset = {x=0, y=0}
 	
 	-----------------	
@@ -39,7 +39,7 @@ $On Game Init: [
 	--For reference font 1 is medium size, font 2 is large size, and font 3 is small size 
 	--If the player's screen is > 3200 pixels the gauge will use the high_resolution font
 	--If the player's screen is <= 1024 pixels the gauge will use the low_resolution font
-	CustomWingGauge.fonts = {medium_resolution = 4, low_resolution = 6, high_resolution = 5}
+	CustomWingGauge.fonts = {medium_resolution = 1, low_resolution = 3, high_resolution = 2}
 	
 	-----------------
 	--To use gray-scale dots instead of red and green wingmen dots set: 
@@ -67,6 +67,8 @@ $On Game Init: [
 	CustomWingGauge.winglist = {} --will save as table of wingnames as strings
 	CustomWingGauge.basecolor = {35,35,35,255} --dark gray as default
 	CustomWingGauge.statuses = {notarrived=0, inmission=1, departed=2, destroyed=3}
+	CustomWingGauge.Mode_start = 1
+	CustomWingGauge.Mode_onframe = 2
 
 	function CustomWingGauge:ColorMixer(colorA,colorB,percentage)
 
@@ -197,32 +199,38 @@ $On Game Init: [
 		return num or 1
 	end
 	
-	function CustomWingGauge:UpdateWingmenStatus(shipname, status_mode)
-		if shipname ~= nil and (status_mode == self.statuses.departed or status_mode == self.statuses.destroyed) then 
-			local ship = mn.Ships[shipname]
-			if ship ~= nil and ship:isValid() then
-				--get ship wing
-				local s_wing = ship:getWing()
-				if s_wing ~= nil and s_wing.Name ~= nil and self.winglist ~= nil and #self.winglist > 0 then 
-					--if it has a wing check if it's a wingmen wing
-					local wing = self.winglist[s_wing.Name]
-					--find ship and update status
-					if wing ~= nil then
-						for i_ship, v_ship in ipairs(wing) do
-							if v_ship.name == shipname then
-								wing[i_ship].status = status_mode
-							end
+	function CustomWingGauge:UpdateWingmenStatus(ship, status_mode)
+
+		if ship ~= nil and ship:isValid() and (status_mode == self.statuses.departed or status_mode == self.statuses.destroyed) then 
+
+			--get ship wing
+			local s_wing = ship:getWing()
+			if s_wing ~= nil and s_wing.Name ~= nil and self.winglist ~= nil and #self.winglist > 0 then 
+
+				--if it has a wing check if it's a wingmen wing
+				local wing = self.winglist[s_wing.Name]
+				--find ship and update status
+				if wing ~= nil then
+					local shipname = ship.Name
+					for i_ship, v_ship in ipairs(wing) do
+						if v_ship.name == shipname then
+							wing[i_ship].status = status_mode
 						end
 					end
-				end 
+				end
+
 			end
+
 		end
+
 	end
 	
 	function CustomWingGauge:Draw(mode, isinmission, gauge) --Function makes a wingmen gauge with colors showing wingmen health and full wingnames. The input 'mode' can be start or onframe. This function uses 1 global variable, CustomWingGauge.
 
-		mode = mode or "start"
-		isinmission = isinmission or false
+		mode = mode or CustomWingGauge.Mode_start
+		if isinmission == nil then
+			isinmission = false
+		end
 		
 		--gauge still tracks data if this is false, just no drawing
 		local isplayergaugeon = false
@@ -278,7 +286,7 @@ $On Game Init: [
 		end
 		
 		--set and check font
-		local font = Object_Info_Help.fonts[fonttype] or 1 --add this 1 in case user remove the option entry somehow 	
+		local font = self.fonts[fonttype] or 1 --add this 1 in case user remove the option entry somehow 	
 		
 		--if this font doesn't actually exist then find it's closest match
 		local font_conversion = {medium_resolution=1, high_resolution=2, low_resolution=3}
@@ -511,8 +519,9 @@ $On Game Init: [
 						local iconfull
 						local isalive
 						
-						--determine status			
-						if wing[i].status == self.statuses.notarrived then
+						--determine status	
+						local stat = wing[i].status						
+						if stat == self.statuses.notarrived then
 							if mn.evaluateSEXP("( is-in-mission !"..sname.."! )") then
 								wing[i].status = self.statuses.inmission
 							end
@@ -529,7 +538,6 @@ $On Game Init: [
 						--]]
 						
 						--draw for in-mission
-						local stat = wing[i].status
 						if stat == self.statuses.inmission then
 							isalive = true
 							iconfull = true
@@ -596,7 +604,7 @@ $On Game Init: [
 		end
 
 		--first hide retail wingmen gauge, uses GetWingList()
-		if mode == "start" then
+		if mode == self.Mode_start then
 			--get wingmen gauge color
 			--local defaultgag = hu.getHUDGaugeHandle("Wingman status")
 			local indexwinggag = 31
@@ -616,7 +624,7 @@ $On Game Init: [
 				local wings = mn.Wings
 				if wings ~= nil then 
 					if wings[1]:isValid() then 
-						self.winglist = self:GetWingList() or {}
+						self.winglist = self.SpecificWings or self:GetWingList() or {}
 						
 						--get longest wingname from starting wingnames
 						if #self.winglist > 0 then
@@ -665,7 +673,7 @@ $On Game Init: [
 		end
 
 		--draws the wing gauge every frame, uses DrawWingSection()
-		if mode == "onframe" and isinmission then
+		if mode == self.Mode_onframe and isinmission then
 			--get list of wingnames to draw, end if none
 			local winglist = self.winglist
 			if #winglist <= 0 then return end
@@ -759,81 +767,137 @@ $On Game Init: [
 
 	end
 
+	function CustomWingGauge:ShipDoD(hvship, isdestroyed)
+
+		--validity checks		
+		if self.isactive and hvship ~= nil and hvship:isValid() and hvship:getBreedName() == "Ship" and mn.getMissionTime() > 0.1 then
+
+			--determine status
+			local status
+			if isdestroyed then
+				status = self.statuses.destroyed
+			else
+				status = self.statuses.departed
+			end
+
+			--update status
+			self:UpdateWingmenStatus(hvship, status)
+
+		end
+		
+	end
+
+	function CustomWingGauge:HUDDraw()
+		
+		if self.isactive and hu.HUDDrawn and not hu.HUDDisabledExceptMessages and mn.getMissionTime() > 0.1 then
+			if not self.RTT.isactive or ( self.RTT.isactive and gr.hasViewmode(VM_CHASE) ) then
+				self:Draw(self.Mode_onframe, true)
+			end
+		end	
+			
+	end
+		
+	function CustomWingGauge:Setup()
+
+		if self.isactive then 
+			self.winglist = {}
+			self.isplayeralone = false 
+			self:Draw(self.Mode_start, true)	--true for in-mission 
+			
+			--check if cockpit display exists and if user wants to use RTT
+			self.RTT.isactive = false
+			local player = hv.Player
+			if self.RTT.use and player ~= nil and player:isValid() then
+				local pcockpit = player.CockpitDisplays
+				if pcockpit ~= nil and pcockpit:isValid() then 
+					if pcockpit[1] ~= nil and pcockpit[1]:isValid() then
+						self.RTT.isactive = true
+					end
+				end 
+			end
+			
+			--setup custom scripted gauge render 
+			local gname = self.RTT.gauge_name
+			if gname ~= nil then 
+				self.RTT.use = true
+				if hu.getHUDGaugeHandle(gname) ~= nil and self.RTT.use then 
+					hu.getHUDGaugeHandle(gname).RenderFunction = function(gauge)
+						if gr.hasViewmode(VM_INTERNAL) or gr.hasViewmode(VM_TRACK) then
+							self:Draw(self.Mode_onframe, true, gauge)
+						end
+					end
+				end
+			end
+			
+		end	
+
+	end
+
+	function CustomWingGauge:UseCustom(winglist)
+
+		--set wings if valid
+		if type(winglist) == "table" then
+		
+			if #winglist <= 0 then return end
+			
+			--clear winglist 
+			self.winglist = {}
+			--there are wings so player not alone
+			self.isplayeralone = false
+			--assign special wings
+			self.SpecificWings = winglist
+			--run starting to make winglist
+			self:Draw(self.Mode_start, true)	--true for in-mission 
+
+		end
+
+	end
+
+	--sexp API for CustomWingGauge:UseCustom(winglist)
+	mn.LuaSEXPs["wingmen-gauge-set-wings"].Action = function(...) 
+
+		if #arg <= 0 then return end
+
+		--add to table
+		local winglist = {}
+		for _, value in ipairs(arg) do
+			table.insert(winglist, value[1])
+		end	
+
+		--add list
+		CustomWingGauge:UseCustom(winglist)
+
+	end
+
 ]
 
 	
 $State: GS_STATE_HUD_CONFIG
 $On State End: [
 	if CustomWingGauge.isactive then
-		CustomWingGauge:Draw("start",false) --false for not in-mission 
+		CustomWingGauge:Draw(CustomWingGauge.Mode_start, false) --false for not in-mission 
 	end
 ]
 	
 $State: GS_STATE_GAME_PLAY
 
 $On Gameplay Start: [
-	if CustomWingGauge.isactive then 
-		CustomWingGauge.isplayeralone = false 
-		CustomWingGauge:Draw("start", true)	--true for in-mission 
-		
-		--check if cockpit display exists and if user wants to use RTT
-		CustomWingGauge.RTT.isactive = false
-		local player = hv.Player
-		if CustomWingGauge.RTT.use and player ~= nil and player:isValid() then
-			local pcockpit = player.CockpitDisplays
-			if pcockpit ~= nil and pcockpit:isValid() then 
-				if pcockpit[1] ~= nil and pcockpit[1]:isValid() then
-					CustomWingGauge.RTT.isactive = true
-				end
-			end 
-		end
-		
-		--setup custom scripted gauge render 
-		local gname = CustomWingGauge.RTT.gauge_name
-		if gname ~= nil then 
-			CustomWingGauge.RTT.use = true
-			if hu.getHUDGaugeHandle(gname) ~= nil and CustomWingGauge.RTT.use then 
-				hu.getHUDGaugeHandle(gname).RenderFunction = function(gauge)
-					if gr.hasViewmode(VM_INTERNAL) or gr.hasViewmode(VM_TRACK) then
-						CustomWingGauge:Draw("onframe", true, gauge)
-					end
-				end
-			end
-		end
-		
-	end
+	CustomWingGauge:Setup()
 ]
 
 $On HUD Draw: [
-	if hu.HUDDrawn and mn.getMissionTime() > 0.1 and CustomWingGauge.isactive then
-		if not CustomWingGauge.RTT.isactive or ( CustomWingGauge.RTT.isactive and gr.hasViewmode(VM_CHASE) ) then
-			CustomWingGauge:Draw("onframe", true)
-		end
-	end
+	CustomWingGauge:HUDDraw()
 ]
 
 $On Ship Depart: [
-	--only valid for ships, gets ship handle
-	local hs = hv.Ship
-	if CustomWingGauge.isactive and hs ~= nil and hs:isValid() and mn.getMissionTime() > 0.1 then
-		local hvship = tostring(hs)
-		CustomWingGauge:UpdateWingmenStatus(hvship, CustomWingGauge.statuses.departed)
-	end
+	CustomWingGauge:ShipDoD(hv.Ship, false)
 ]
 $On Death: [
-	--only valid for ships, gets object handle
-	local hs = hv.Self
-	if CustomWingGauge.isactive and hs ~= nil and hs:isValid() and mn.getMissionTime() > 0.1 then
-		local hvship = tostring(hs)
-		CustomWingGauge:UpdateWingmenStatus(hvship, CustomWingGauge.statuses.destroyed)
-	end
+	CustomWingGauge:ShipDoD(hv.Self, true)
 ]
 
 $On State End: [
-	if CustomWingGauge.isactive then
-		--CustomWingGauge.isactive = false
-		CustomWingGauge.winglist = {}
-	end
+	CustomWingGauge.winglist = {}
 ]
 
 #End
