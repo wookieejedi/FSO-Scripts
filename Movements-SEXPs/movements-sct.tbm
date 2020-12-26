@@ -1,7 +1,9 @@
 #Global Hooks
 
 $Simulation: [
-	Movements:OnSimulation()
+	if Movements then
+		Movements:OnSimulation()
+	end
 ]
 
 #End
@@ -12,7 +14,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.6, released on June 11, 2020 by wookieejedi
+	--Version 1.7, released on December 26, 2020 by wookieejedi
 	--Description: custom sexps and functions that allow for much easier ship movements and rotations
 	--Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 	
@@ -335,6 +337,11 @@ $On Game Init: [
 		
 		if ship == nil then return end
 		if not ship:isValid() then return end
+
+		--only continue if engines are not blown out
+		if mn.evaluateSEXP("( <= ( hits-left-subsystem-generic !"..shipname.."! !Engines! ) 0 )") then
+			return
+		end
 
 		local initial_pbh = {p=self:Chop(ship.Orientation.p), b=self:Chop(ship.Orientation.b), h=self:Chop(ship.Orientation.h)}
 
@@ -880,7 +887,7 @@ $On Game Init: [
 					local decleration_time = sphycis.ForwardDecelerationTime
 					decleration_time = self:Get_safe_number(decleration_time)
 					
-					local decleration_time_adjusted = decleration_time * 3.6
+					local decleration_time_adjusted = decleration_time * 4.0 --(from object.cpp line 826, though it should be the damp *4)
 					local percent_speed = current_speed_z/max_speed_z
 					local stop_adusted = math.ceil ( decleration_time_adjusted * percent_speed )
 					--^go the nearest second just to be safe
@@ -1027,7 +1034,9 @@ $On Game Init: [
 		
 		if entry ~= nil then
 			--remove any play dead order 
-			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
+			if entry.play_dead_PR >= 0 then 
+				mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
+			end
 			--remove any waypoints once order
 			--ba.print("entry.shipname: "..entry.shipname..", entry.waypoint_path_name: "..entry.waypoint_path_name..", entry.priority "..entry.priority.."...\n")
 			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-waypoints-once !".. entry.waypoint_path_name .."! !".. entry.priority .."! ) )")
@@ -1064,8 +1073,10 @@ $On Game Init: [
 		--change status
 		entry.is_running_waypoints_once = false
 		
-		--set play dead persistent order 
-		mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
+		--remove play dead persistent order 
+		if entry.play_dead_PR >= 0 then 
+			mn.runSEXP("( remove-goal !" .. entry.shipname .."! ( ai-play-dead-persistent !".. entry.play_dead_PR .."! ) )")
+		end
 		
 		--save last known waypoint location
 		--using last known location of last waypoint helps mitigate effects of the ship over-shooting the final waypoint
@@ -1143,7 +1154,9 @@ $On Game Init: [
 									--add goal and set to tracking
 									if dis_wp_previous_to_wp > v.track_distance then
 										--remove play dead persistent
-										mn.runSEXP("( remove-goal !" .. v.shipname .."! ( ai-play-dead-persistent !".. v.play_dead_PR .."! ) )")
+										if v.play_dead_PR >= 0 then 
+											mn.runSEXP("( remove-goal !" .. v.shipname .."! ( ai-play-dead-persistent !".. v.play_dead_PR .."! ) )")
+										end
 										--start waypoints once
 										mn.runSEXP("( add-goal !"..v.shipname.."! ( ai-waypoints-once !"..v.waypoint_path_name.."! !"..v.priority.."! ))")
 										v.is_running_waypoints_once = true
