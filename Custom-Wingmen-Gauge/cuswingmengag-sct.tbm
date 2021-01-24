@@ -22,14 +22,14 @@ $On Game Init: [
 	-----------------
 	--To use a compact, grid style for the gauge set: 
 	--CustomWingGauge.style = "grid"
-	--if using 'grid', it is recommended to set the position, CustomWingGauge.origin = {x=0.88, y=0.3}
+	--if using 'grid', it is recommended to set the position, CustomWingGauge.origin = {x=0.88, y=0.25}
 	--if using 'default', it is recommended to set the position, CustomWingGauge.origin = {x=0.935, y=0.2}
-	CustomWingGauge.style = "default"
+	CustomWingGauge.style = "grid"
 	
 	-----------------
 	--To change position of the gauge set values of origin and offset, similar to hud_gaugles.tbl: 
 	--Note this custom gauge only has three size scales (<= 1024 width, 1024 < width <= 3200, and > 3200)
-	CustomWingGauge.origin = {x=0.935, y=0.2}
+	CustomWingGauge.origin = {x=0.88, y=0.25}
 	CustomWingGauge.offset = {x=0, y=0}
 	
 	-----------------	
