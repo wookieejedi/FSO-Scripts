@@ -58,6 +58,12 @@ $On Game Init: [
 		self.Active_Ships_trk_Wpts_Sum = 0
 		self.Active_Wpts_trk_Ships = {}
 		self.Active_Wpts_trk_Ships_Sum = 0
+		self.is_enabled = true
+		
+		if ba.MultiplayerMode then
+			self.is_enabled = false
+		end
+
 	end
 
 	function Movements:Round(input_number, numDecimalPlaces) --if no number of decimals is specified then it defaults to 0
@@ -1281,9 +1287,7 @@ $On Game Init: [
 
 	function Movements:GetRadius(shipname) --gets a random value that is between the radius and diameter of a ship with a - or + sign
 		local final = 100
-		if allownegative == nil then
-			allownegative = true
-		end
+
 		if shipname ~= nil then
 			local ship = mn.Ships[shipname]
 			if ship ~= nil and ship:isValid() then
@@ -1449,25 +1453,29 @@ $On Game Init: [
 	end
 
 	function Movements:OnSimulation()
-		local current_time = mn.getMissionTime()
-		if current_time > 0.1 then
-			--update rotations --now done on Simulation
-			if self.Active_Rotations_Sum > 0 then
-				self:Run_Rotation()
-			end
-			--update current time and check waypoints
-			if current_time > self.Time_Previous_Check + self.G_Time_Check_Interval then
-				self.Time_Previous_Check = current_time
-				--check waypoints tracking ships
-				if self.Active_Wpts_trk_Ships_Sum > 0 then
-					self:Check_Wpts_trk_Ships()
-				end 
-				--check ships tracking waypoints
-				if self.Active_Ships_trk_Wpts_Sum > 0 then
-					self:Check_Ships_trk_Wpts()
+		
+		if self.is_enabled then
+			local current_time = mn.getMissionTime()
+			if current_time > 0.1 then
+				--update rotations --now done on Simulation
+				if self.Active_Rotations_Sum > 0 then
+					self:Run_Rotation()
 				end
-			end
-		end	
+				--update current time and check waypoints
+				if current_time > self.Time_Previous_Check + self.G_Time_Check_Interval then
+					self.Time_Previous_Check = current_time
+					--check waypoints tracking ships
+					if self.Active_Wpts_trk_Ships_Sum > 0 then
+						self:Check_Wpts_trk_Ships()
+					end 
+					--check ships tracking waypoints
+					if self.Active_Ships_trk_Wpts_Sum > 0 then
+						self:Check_Ships_trk_Wpts()
+					end
+				end
+			end	
+		end
+
 	end
 	
 ]
@@ -1476,42 +1484,46 @@ $On Game Init: [
 $State: GS_STATE_GAME_PLAY
 
 $On Gameplay Start: [
-	Movements:Initiate()
+	if Movements then
+		Movements:Initiate()
+	end
 ]
 
 $On Waypoints Done: [
 	local hs = hv.Ship
 	local hswpp = hv.Waypointlist
-	if hs ~= nil and hs:isValid() and hswpp ~= nil and hswpp:isValid() and mn.getMissionTime() > 0.1 then
+	if Movements and Movements.is_enabled and hs ~= nil and hs:isValid() and hswpp ~= nil and hswpp:isValid() and mn.getMissionTime() > 0.1 then
 		Movements:Pause_Ships_trk_Wpts(hs.Name, hswpp.Name)
 	end
 ]
 
 $On Death: [
 	local hook_ship = hv.Self
-	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
+	if Movements and Movements.is_enabled and hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 and hook_ship:getBreedName() == "Ship" then
 		local shipname = tostring(hook_ship)
 		Movements:Ship_DoD_Remove(shipname)
 	end
 ]
 
 $On Warp Out: [
+	--also checking for warpout just because it triggers sooner
+	--perfectly safe to remove many times because it only removes it if it is on the list
 	local hook_ship = hv.Self
-	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
+	if Movements and Movements.is_enabled and hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
 		Movements:Ship_DoD_Remove(hook_ship.Name)
 	end	
 ]
 
 $On Ship Depart: [
 	local hook_ship = hv.Ship
-	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
+	if Movements and Movements.is_enabled and hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
 		Movements:Ship_DoD_Remove(hook_ship.Name)
 	end	
 ]
 
 $On Goals Cleared: [
 	local hook_ship = hv.Ship
-	if hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
+	if Movements and Movements.is_enabled and hook_ship ~= nil and hook_ship:isValid() and mn.getMissionTime() > 0.1 then
 		local shipname = hook_ship.Name
 		Movements:Remove_Rotation(shipname)
 		Movements:Remove_Ships_trk_Wpts(shipname)
@@ -1519,7 +1531,9 @@ $On Goals Cleared: [
 ]
 
 $On State End: [
-	Movements:Initiate()
+	if Movements then
+		Movements:Initiate()
+	end
 ]
 
 
