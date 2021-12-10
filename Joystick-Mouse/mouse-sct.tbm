@@ -6,24 +6,23 @@ $On Game Init: [
 
 	JoyMouse = {
 		cfg_filename = "mouse_script.cfg",
-		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'Toggle Mouse as Joystick' key.",
+		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'(Multiplayer) Message All' key.",
 		save_needed = false
 	}
-	
+
 	function JoyMouse:SetSettings()
-	
+
 		self.ShowTooltip = false
 		if cf.fileExists(self.cfg_filename, "data") then
 			self:Read_cfg()
 		else
 			self.Active = -1
-			self.Invert = -1
-			self.Curve = 1
+			self.Invert = 1
 			self:Write_cfg()
 		end
 
 	end
-	
+
 	function JoyMouse:CheckResolution()
 
 		local w = gr.getScreenWidth()
@@ -63,36 +62,71 @@ $On Game Init: [
 	end
 
     function JoyMouse:Write_cfg()
+
         local mouse_cfg_file = cf.openFile(self.cfg_filename, "w", "data")
         mouse_cfg_file:write(tostring(self.Active) .. "\n")
-        mouse_cfg_file:write(tostring(self.Curve) .. "\n")
         mouse_cfg_file:write(tostring(self.Invert) .. "\n")
         mouse_cfg_file:close()
+
     end
 
     function JoyMouse:Read_cfg()
+
         local mouse_cfg_file = cf.openFile(self.cfg_filename, "r", "data")
         self.Active = tonumber(mouse_cfg_file:read("*l"))
-        self.Curve = tonumber(mouse_cfg_file:read("*l"))
         self.Invert = tonumber(mouse_cfg_file:read("*l"))
         mouse_cfg_file:close()
+
     end
 
-	function JoyMouse:ResetCenter(mouse_center_x, mouse_center_y)
-		
+	function JoyMouse:ForcePosition_1Frame(force_x, force_y)
+
+		-- recall that forcing the cursor to a position only works if the cursor is shown, so show it
+		-- also, the cursor has to be shown and cannot be hidden in the same frame to work
+		-- set it to hide 1 frame later
+		if self.WasMouseForced ~= true then
+
+			io.setCursorHidden(false)
+			io.forceMousePosition(force_x, force_y)
+
+			self.WasMouseForced = true
+			self.TimeWasForced = mn.getMissionTime()
+
+		end
+
+	end
+
+	function JoyMouse:ForcePosition_ResetCheck()
+
+		--recall, the cursor has to be shown and cannot be hidden in the same frame to work
+		-- hide the cursor again so we don't see it 1 frame later
+		if self.WasMouseForced then
+			local prev_time = self.TimeWasForced
+			if prev_time ~= nil and mn.getMissionTime() > prev_time then
+
+				io.setCursorHidden(true)
+				self.WasMouseForced = false
+
+			end
+		end
+
+	end
+
+	function JoyMouse:ResetCenter_InMission(mouse_center_x, mouse_center_y)
+
 		-- reset to zero
 		if self.Active > 0 then
 			--ba.setControlMode(LUA_FULL_CONTROLS)
-			
+
 			local mouse_center_x = mouse_center_x or gr.getScreenWidth() / 2
 			local mouse_center_y = mouse_center_y or gr.getScreenHeight() / 2
-			
+
 			--force to screen center
-			io.forceMousePosition(mouse_center_x, mouse_center_y)
-			
+			JoyMouse:ForcePosition_1Frame(mouse_center_x, mouse_center_y)
+
 			--save that it was centered and rehide cursor
 			self.Centered = true
-			
+
 			--reset pitch and bank
 			local controls = ba.getControlInfo()
 			controls.Heading = 0
@@ -103,12 +137,7 @@ $On Game Init: [
 
 	function JoyMouse:Configure_DrawOptions()
 
-		local w = gr.getScreenWidth()
-		local h = gr.getScreenHeight()
-
 		gr.setColor(53,53,167)
-		local x1 = w / 2
-		local y1 = h - 52
 
 		gr.drawRectangle(self.elements.toggle.x1, self.elements.toggle.y1, self.elements.toggle.x2, self.elements.toggle.y2, false)
 		if self.Active > 0 then
@@ -145,16 +174,19 @@ $On Game Init: [
 	end
 
 	function JoyMouse:Configure_M_Moved()
+
 		local x = io.getMouseX()
 		local y = io.getMouseY()
 		if x > self.elements.toggle.x1 and x < self.elements.toggle.x2 and y > self.elements.toggle.y1 and y < self.elements.invert.y2 then
 			self.ShowTooltip = true
 		else
 			self.ShowTooltip = false
-		end 	
+		end
+
 	end
 	
 	function JoyMouse:Configure_M_Clicked()
+
 		local x = io.getMouseX()
 		local y = io.getMouseY()
 		if x > self.elements.toggle.x1 and x < self.elements.toggle.x2 and y > self.elements.toggle.y1 and y < self.elements.toggle.y2 then
@@ -167,202 +199,245 @@ $On Game Init: [
 			self.Invert = -self.Invert
 			ad.playInterfaceSoundByName("0")
 			self.save_needed = true
-		end	
+		end
+
 	end
 	
 	function JoyMouse:Configure_End()
+
 		if self.save_needed then
 			self:Write_cfg()
 			self.save_needed = false
 			self:SetCheck()
 		end
+
 	end
 
 
-	function JoyMouse:ControlA(value, centervalue, mousedeadzone, mousesensitivity)
-	   -- get the actual difference from centerpoint
-	   local delta = value - centervalue
+	function JoyMouse:ControlA(value, centervalue, mousedeadzone, sensitivity_percent, max_delta)
 
-	   -- default multiplier to +1
-	   local multiplier = 1
+		-- get the actual difference from centerpoint
+		local delta = value - centervalue
 
-	   -- if we are handling negative values set multiplier to -1
-	   -- and make sure we deal only with positive values
-	   if delta < 0 then
-		  multiplier = -1
-		  delta = math.abs(delta)
-	   end
+		-- default multiplier to +1
+		local multiplier = 1
 
-	   -- deduct deadzone from the delta
-	   delta = delta - mousedeadzone
-	   if delta < 0 then
-		  delta = 0
-	   end
+		-- if we are handling negative values set multiplier to -1
+		-- and make sure we deal only with positive values
+		if delta < 0 then
+			multiplier = -1
+			delta = delta*-1
+		end
 
-	   -- scale delta from 0 to 1 according to defined sensitivity
-	   delta = delta / mousesensitivity
-	   if delta > 1 then
-		  delta = 1
-	   end
+		-- deduct deadzone from the delta
+		-- if within deadzone then delta is 0 and mouse has 'not moved'
+		delta = delta - mousedeadzone
+		if delta < 0 then
+			delta = 0
+		end
 
-	   -- if we do not have extreme values
-	   -- apply the defined sensitivity curve
-	   if (delta > 0) and (delta < 1) then
-		  delta = math.pow(delta, self.Curve)
-	   end
+		-- scale delta according to defined sensitivity
+		-- high sensitive: little movement should move mouse a lot (high delta)
+		-- low sensitive: little movement should move mouse a little (low delta)
+		local delta_scaled = ((delta * sensitivity_percent) / max_delta)
+		if delta_scaled > 1 then
+			delta_scaled = 1
+		end
 
-	   -- apply the multiplier
-	   delta = delta * multiplier
+		-- apply the multiplier
+		delta_scaled = delta_scaled * multiplier
 
-	   return delta
+		return delta_scaled
 	end
 
-	function JoyMouse:BoundaryCheck(sensitivity, center_x, center_y, mouse_x, mouse_y) --not used ATM
-	   
-	   if sensitivity == nil or center_x == nil or center_y == nil then return end
+	function JoyMouse:BoundaryCheck(movement_pixel_max, center_x, center_y, mouse_x, mouse_y)
 
-	   -- Do we go outside sensitivity zone
-	   local f_mouse_x = math.max(center_x - sensitivity, math.min(center_x + sensitivity, mouse_x))
-	   local f_mouse_y = math.max(center_y - sensitivity, math.min(center_y + sensitivity, mouse_y))
+		if sensitivity == nil or center_x == nil or center_y == nil then return end
 
-	   -- reset the cursor to the nearest boundary
-	   if mouse_x ~= f_mouse_x or mouse_y ~= f_mouse_y then
-			io.forceMousePosition(f_mouse_x, f_mouse_y)
-			--gr.setColor(255,0,0)
-			--gr.drawCircle(25, 800, 400)
-	   end
+		-- Check if mouse is outside sensitivity pixel zone
+		local function force_check(mouse_val, center_val, area_pixel_max)
+			local force_val
+			local multi = 1
+			if mouse_val < 0 then 
+				mouse_val = mouse_val * -1
+				multi = -1
+			end
+			if mouse_val > area_pixel_max + center_val then
+				force_val = (area_pixel_max + center_val) * multi
+			end
+			return force_val
+		end
+
+		local force_x = force_check(mouse_x, center_x, movement_pixel_max)
+		local force_y = force_check(mouse_y, center_y, movement_pixel_max)
+
+		-- reset the cursor to the nearest boundary
+		if force_x ~= nil or force_y ~= nil then
+			self:ForcePosition_1Frame(force_x or mouse_x, force_y or mouse_y)
+		end
 
 	end
 
 	function JoyMouse:DrawArrows(x, y)
-	  
-	  if x == nil or y == nil then return end
-	  
-	  if hu.HUDDrawn and not hu.HUDDisabledExceptMessages then
-	
-		gr.setColor(255,255,255)
-		local center_x = gr.getScreenWidth() / 2
-		local center_y = gr.getScreenHeight() / 2
-		--gr.drawRectangle(center_x - mousesensitivity, center_y - mousesensitivity, center_x + mousesensitivity, center_y + mousesensitivity, false)
-		--gr.drawRectangle(center_x - mousedeadzone, center_y - mousedeadzone, center_x + mousedeadzone, center_y + mousedeadzone, false)
-		gr.drawGradientLine(x, y, x + 20, y - 20)
-		gr.drawGradientLine(x, y, x - 20, y + 20)
-		gr.drawGradientLine(x, y, x + 20, y + 20)
-		gr.drawGradientLine(x, y, x - 20, y - 20)
 
-		-- simple line option
-		--gr.drawGradientLine(x, y, center_x, center_y)
+		if x == nil or y == nil then return end
+		
+		if hu.HUDDrawn and not hu.HUDDisabledExceptMessages then
 
-		-- settings here for mouse-direction arrows
-		local arrow_len = 20
-		local arrow_angle = math.rad(64)
+			gr.setColor(255,255,255)
+			local center_x = gr.getScreenWidth() / 2
+			local center_y = gr.getScreenHeight() / 2
+			--gr.drawRectangle(center_x - mousesensitivity, center_y - mousesensitivity, center_x + mousesensitivity, center_y + mousesensitivity, false)
+			--gr.drawRectangle(center_x - mousedeadzone, center_y - mousedeadzone, center_x + mousedeadzone, center_y + mousedeadzone, false)
+			gr.drawGradientLine(x, y, x + 20, y - 20)
+			gr.drawGradientLine(x, y, x - 20, y + 20)
+			gr.drawGradientLine(x, y, x + 20, y + 20)
+			gr.drawGradientLine(x, y, x - 20, y - 20)
 
-		-- don't draw arrows at dead centre
-		if y == center_y and x == center_x then
-		  return
+			-- simple line option
+			--gr.drawGradientLine(x, y, center_x, center_y)
+
+			-- settings here for mouse-direction arrows
+			local arrow_len = 20
+			local arrow_angle = math.rad(64)
+
+			-- don't draw arrows at dead centre
+			if y == center_y and x == center_x then
+				return
+			end
+
+			-- common calcs
+			local angle = math.atan2((y-center_y),(x-center_x))
+			local arrow_left_offset_x = arrow_len * math.cos(angle + arrow_angle)
+			local arrow_left_offset_y = arrow_len * math.sin(angle + arrow_angle)
+			local arrow_right_offset_x = arrow_len * math.cos(angle - arrow_angle)
+			local arrow_right_offset_y = arrow_len * math.sin(angle - arrow_angle)
+
+			-- 1/3 arrow
+			local onethird_x = (x-center_x)/3 + center_x
+			local onethird_y = (y-center_y)/3 + center_y
+			local onethirdleft_x = onethird_x - arrow_left_offset_x
+			local onethirdleft_y = onethird_y - arrow_left_offset_y
+			local onethirdright_x = onethird_x - arrow_right_offset_x
+			local onethirdright_y = onethird_y - arrow_right_offset_y
+			gr.drawGradientLine(onethird_x, onethird_y, onethirdleft_x, onethirdleft_y)
+			gr.drawGradientLine(onethird_x, onethird_y, onethirdright_x, onethirdright_y)
+
+			-- 2/3rds arrow
+			local twothird_x = (x-center_x)/3*2 + center_x
+			local twothird_y = (y-center_y)/3*2 + center_y
+			local twothirdleft_x = twothird_x - arrow_left_offset_x
+			local twothirdleft_y = twothird_y - arrow_left_offset_y
+			local twothirdright_x = twothird_x - arrow_right_offset_x
+			local twothirdright_y = twothird_y - arrow_right_offset_y
+			gr.drawGradientLine(twothird_x, twothird_y, twothirdleft_x, twothirdleft_y)
+			gr.drawGradientLine(twothird_x, twothird_y, twothirdright_x, twothirdright_y)
+
 		end
-
-		-- common calcs
-		local angle = math.atan2((y-center_y),(x-center_x))
-		local arrow_left_offset_x = arrow_len * math.cos(angle + arrow_angle)
-		local arrow_left_offset_y = arrow_len * math.sin(angle + arrow_angle)
-		local arrow_right_offset_x = arrow_len * math.cos(angle - arrow_angle)
-		local arrow_right_offset_y = arrow_len * math.sin(angle - arrow_angle)
-
-		-- 1/3 arrow
-		local onethird_x = (x-center_x)/3 + center_x
-		local onethird_y = (y-center_y)/3 + center_y
-		local onethirdleft_x = onethird_x - arrow_left_offset_x
-		local onethirdleft_y = onethird_y - arrow_left_offset_y
-		local onethirdright_x = onethird_x - arrow_right_offset_x
-		local onethirdright_y = onethird_y - arrow_right_offset_y
-		gr.drawGradientLine(onethird_x, onethird_y, onethirdleft_x, onethirdleft_y)
-		gr.drawGradientLine(onethird_x, onethird_y, onethirdright_x, onethirdright_y)
-
-		-- 2/3rds arrow
-		local twothird_x = (x-center_x)/3*2 + center_x
-		local twothird_y = (y-center_y)/3*2 + center_y
-		local twothirdleft_x = twothird_x - arrow_left_offset_x
-		local twothirdleft_y = twothird_y - arrow_left_offset_y
-		local twothirdright_x = twothird_x - arrow_right_offset_x
-		local twothirdright_y = twothird_y - arrow_right_offset_y
-		gr.drawGradientLine(twothird_x, twothird_y, twothirdleft_x, twothirdleft_y)
-		gr.drawGradientLine(twothird_x, twothird_y, twothirdright_x, twothirdright_y)
-	  
-	  end
 
 	end
 	
 	function JoyMouse:ViewValid()
-		if not gr.hasViewmode(VM_FREECAMERA) and not gr.hasViewmode(VM_EXTERNAL) then 
+
+		if not gr.hasViewmode(VM_FREECAMERA) and not gr.hasViewmode(VM_EXTERNAL) and hu.HUDDrawn and not hu.HUDDisabledExceptMessages then 
 			return true
 		else 
 			return false
 		end
+
+	end
+
+	function JoyMouse:SetPixelValues()
+
+		-- get screen resolution and center coordinates
+		local center_x = gr.getScreenWidth() / 2
+		self.Center_x = center_x
+		local center_y = gr.getScreenHeight() / 2
+		self.Center_y = center_y
+
+		-- get mouse settings 
+		-- recall raw mouse sensitivity and deadzone goes from 0 to 9
+		-- example: so high would be 400 and low would be 40
+
+		local sensitivity_percent = (1.0 + io.getMouseSensitivity()) / 10
+		local movement_pixel_max = math.min(center_x, center_y) / 2.25 
+		local movement_pixel_min = movement_pixel_max/10
+		local deadzone_percent = (1.0 + io.getJoyDeadzone()) / 10
+		local deadzone_pixels = deadzone_percent * ( movement_pixel_min / 2 )
+
+		self.Sensitivity_percent = sensitivity_percent * 2
+		self.Movement_pixel_max = movement_pixel_max
+		self.Deadzone_pixels = deadzone_pixels
+
 	end
 
 	function JoyMouse:OnFrame()
-		
+
 		--recall that this On Frame will only work during gameplay, since that's where the hook is
 
-		--gr.drawString(tostring(io.MouseControlStatus), 30, 60)
+		--gr.drawString(tostring(io.getMouseX()), 0, 10)
+		--gr.drawString(tostring(io.getMouseY()), 30, 10)
+
+		self:ForcePosition_ResetCheck()
 
 		if self.Active > 0 and self.Toggleable and self:ViewValid() and mn.getMissionTime() > 0.1 and io.MouseControlStatus then
 
-			local mouse_center_x = gr.getScreenWidth() / 2
-			local mouse_center_y = gr.getScreenHeight() / 2
+			local mouse_center_x = self.Center_x
+			local mouse_center_y = self.Center_y
 
-			--recall that forcing the cursor to a position only works if the cursor is shown, so show it
-			--yes this is a bit more costly, but it is so much more elegant and actually works
-			io.setCursorHidden(false, true)
-			
+			--make sure mouse has been centered
+			if self.Centered == nil or self.Centered == false then 
+				self:ResetCenter_InMission(mouse_center_x, mouse_center_y)
+				return
+			end
+
 			--note that LUA_FULL_CONTROLS stops the io.MouseControlStatus from working, so no need to turn it to false
 			if not self.LUAControlling then 
 				ba.setControlMode(LUA_FULL_CONTROLS)
 				self.LUAControlling = true
 			end
 
-			--make sure mouse has been centered
-			if self.Centered == nil or self.Centered == false then 
-				self:ResetCenter(mouse_center_x, mouse_center_y)
-				return
-			end
-
+			-- get mouse coordinates
 			local mouse_x = io.getMouseX()
 			local mouse_y = io.getMouseY()
 
-			local mousesensitivity = 400 - io.getMouseSensitivity() * 40
-			local mousedeadzone = io.getJoyDeadzone() / 45 * (mousesensitivity / 2)		
-			
+			-- get stashed mouse settings
+			local sensitivity_percent = self.Sensitivity_percent
+			local movement_pixel_max = self.Movement_pixel_max
+			local deadzone_pixels = self.Deadzone_pixels	
+
 			-- get control values		
 			local controls = ba.getControlInfo()
 
-			-- make sure we aint gonna go off the boundaries...
-			--setting the cursor will only do something if we can see the cursor
-			self:BoundaryCheck(mousesensitivity, mouse_center_x, mouse_center_y, mouse_x, mouse_y)
-			-- end of boundaries check
+			-- Not really needed it seems...
+				-- make sure we aint gonna go off the boundaries...
+				-- setting the cursor will only do something if we can see the cursor
+				-- self:BoundaryCheck(movement_pixel_max, mouse_center_x, mouse_center_y, mouse_x, mouse_y)
+				-- end of boundaries check
 
-			-- get the actual control values
-			local current_h = self:ControlA(mouse_x, mouse_center_x, mousedeadzone, mousesensitivity)
-			local current_p = -self.Invert * self:ControlA(mouse_y, mouse_center_y, mousedeadzone, mousesensitivity)
+			-- get the actual control values as a value from 0 to 1
+			-- note, currently this uses movment_pixel_max to get the percent of how far the mouse has moved from center point..
+			-- ..the radius of x and y could be used, but then one would have to move the mouse in the x direciton much farther than y to get the same movement..
+			-- ..and overall the little pixel movement square is small enough that it's okay to use equal amounts in each x and y percent calculation
+			local current_h_percent = self:ControlA(mouse_x, mouse_center_x, deadzone_pixels, sensitivity_percent, movement_pixel_max)
+			local current_p_percent = -self.Invert * self:ControlA(mouse_y, mouse_center_y, deadzone_pixels, sensitivity_percent, movement_pixel_max)
+
+			--gr.drawString("current_h_percent: "..tostring(current_h_percent), 30, 20)
+			--gr.drawString("current_p_percent: "..tostring(current_p_percent), 30, 60)
 
 			-- increment, not replace the existing values
-			controls.Heading = current_h + controls.Heading
-			controls.Pitch = current_p + controls.Pitch
+			controls.Heading = current_h_percent + controls.Heading
+			controls.Pitch = current_p_percent + controls.Pitch
 
 			-- set variables for draw cursor and draw
-			local x = mouse_center_x + (current_h * mousesensitivity)
-			local y = mouse_center_y + (current_p * mousesensitivity)
+			local x = mouse_center_x + (current_h_percent * movement_pixel_max)
+			local y = mouse_center_y + (current_p_percent * movement_pixel_max)
 			
 			self:DrawArrows(x, y)
 
-			--hide it again so we don't see it
-			--yes this is a bit more costly, but it is so much more elegant and actually works
-			io.setCursorHidden(true, true)
-		
 		--if we can't use the mouse joystick make sure we save that we need to center it again before turning it back on
 		else
-			--reset lua controls
+			--reset lua controls (this function also checks if LUA controls are on)
 			self:UnsetLUAControls()
 			--set centering value if needed
 			if self.Centered ~= false then
@@ -388,28 +463,32 @@ $On Game Init: [
 	end
 
 	function JoyMouse:UnsetLUAControls()
+
 		if self.LUAControlling then
 			ba.setControlMode(NORMAL_CONTROLS)
 			self.LUAControlling = false
 		end
+
 	end
 
 	function JoyMouse:KeyCheck(hvkey)
 
-		if hvkey ~= nil and self.Active > 0 then 
+		if self.Active > 0 and hvkey ~= nil then 
 			if hvkey == "Esc" or hvkey == "F1" or hvkey == "F2" or hvkey == "F3" or hvkey == "F4" then
 				self:SetCheck()
 			end
 		end
-	
+
 	end
 	
 	function JoyMouse:SetCheck()
+
 		if self.Active > 0 then
 			if self.Centered ~= false then
 				self.Centered = false
 			end
 		end
+
 	end
 
 ]
@@ -441,6 +520,7 @@ $State: GS_STATE_GAME_PLAY
 $On State Start: [
 	JoyMouse.Toggleable = true
 	JoyMouse.Centered = false
+	JoyMouse:SetPixelValues()
 ]
 
 $On Frame: [
