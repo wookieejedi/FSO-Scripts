@@ -359,11 +359,14 @@ $On Game Init: [
 		-- recall raw mouse sensitivity and deadzone goes from 0 to 9
 		-- example: so high would be 400 and low would be 40
 
-		local sensitivity_percent = (1.0 + io.getMouseSensitivity()) / 10
+		local sensitivity_i = 1.0 + io.getMouseSensitivity()
+		local sensitivity_adjusted = {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
+		local sensitivity_percent = sensitivity_adjusted[sensitivity_i]
 		local movement_pixel_max = math.min(center_x, center_y) / 2.25 
-		local movement_pixel_min = movement_pixel_max/10
-		local deadzone_percent = (1.0 + io.getJoyDeadzone()) / 10
-		local deadzone_pixels = deadzone_percent * ( movement_pixel_min / 2 )
+		local deadzone_i = 1.0 + io.getJoyDeadzone()
+		local deadzone_adjusted = {0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09}
+		local deadzone_percent = deadzone_adjusted[deadzone_i]
+		local deadzone_pixels = deadzone_percent * (movement_pixel_max/2)
 
 		self.Sensitivity_percent = sensitivity_percent * 2
 		self.Movement_pixel_max = movement_pixel_max
