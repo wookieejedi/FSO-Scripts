@@ -4,11 +4,28 @@ $Application: FS2_Open
 
 $On Game Init: [
 
+	--Version 1.1, released on January 31, 2022 by wookieejedi
+	--Description: allows the mouse to act like a joystick, and can be toggled on the fly
+	--Usage: Press the Toggle control key during gameplay, or set the value in the controls interface screen
+
+	--Tested and works in multiplayer
+
 	JoyMouse = {
+
+		--sensitivity settings
+		sensitivity_info_min = 0.80,
+		sensitivity_info_step_size = 0.05,
+
+		--deadzone settings
+		deadzone_info_min = 0.0,
+		deadzone_info_step_size = 0.03,
+
 		cfg_filename = "mouse_script.cfg",
-		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'(Multiplayer) Message All' key.",
+		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'Toggle High HUD Contrast' key.",
 		save_needed = false
 	}
+
+	--Options Menu Functions
 
 	function JoyMouse:SetSettings()
 
@@ -78,62 +95,6 @@ $On Game Init: [
         mouse_cfg_file:close()
 
     end
-
-	function JoyMouse:ForcePosition_1Frame(force_x, force_y)
-
-		-- recall that forcing the cursor to a position only works if the cursor is shown, so show it
-		-- also, the cursor has to be shown and cannot be hidden in the same frame to work
-		-- set it to hide 1 frame later
-		if self.WasMouseForced ~= true then
-
-			io.setCursorHidden(false)
-			io.forceMousePosition(force_x, force_y)
-
-			self.WasMouseForced = true
-			self.TimeWasForced = mn.getMissionTime()
-
-		end
-
-	end
-
-	function JoyMouse:ForcePosition_ResetCheck()
-
-		--recall, the cursor has to be shown and cannot be hidden in the same frame to work
-		-- hide the cursor again so we don't see it 1 frame later
-		if self.WasMouseForced then
-			local prev_time = self.TimeWasForced
-			if prev_time ~= nil and mn.getMissionTime() > prev_time then
-
-				io.setCursorHidden(true)
-				self.WasMouseForced = false
-
-			end
-		end
-
-	end
-
-	function JoyMouse:ResetCenter_InMission(mouse_center_x, mouse_center_y)
-
-		-- reset to zero
-		if self.Active > 0 then
-			--ba.setControlMode(LUA_FULL_CONTROLS)
-
-			local mouse_center_x = mouse_center_x or gr.getScreenWidth() / 2
-			local mouse_center_y = mouse_center_y or gr.getScreenHeight() / 2
-
-			--force to screen center
-			JoyMouse:ForcePosition_1Frame(mouse_center_x, mouse_center_y)
-
-			--save that it was centered and rehide cursor
-			self.Centered = true
-
-			--reset pitch and bank
-			local controls = ba.getControlInfo()
-			controls.Heading = 0
-			controls.Pitch = 0
-		end
-
-	end
 
 	function JoyMouse:Configure_DrawOptions()
 
@@ -214,6 +175,65 @@ $On Game Init: [
 	end
 
 
+	--Movement Functions
+
+	function JoyMouse:ForcePosition_1Frame(force_x, force_y)
+
+		-- recall that forcing the cursor to a position only works if the cursor is shown, so show it
+		-- also, the cursor has to be shown and cannot be hidden in the same frame to work
+		-- set it to hide 1 frame later
+		if self.WasMouseForced ~= true then
+
+			io.setCursorHidden(false)
+			io.forceMousePosition(force_x, force_y)
+
+			self.WasMouseForced = true
+			self.TimeWasForced = mn.getMissionTime()
+
+		end
+
+	end
+
+
+	function JoyMouse:ResetCenter_InMission(mouse_center_x, mouse_center_y)
+
+		-- reset to zero
+		if self.Active > 0 then
+			--ba.setControlMode(LUA_FULL_CONTROLS)
+
+			local mouse_center_x = mouse_center_x or gr.getScreenWidth() / 2
+			local mouse_center_y = mouse_center_y or gr.getScreenHeight() / 2
+
+			--force to screen center
+			JoyMouse:ForcePosition_1Frame(mouse_center_x, mouse_center_y)
+
+			--save that it was centered and rehide cursor
+			self.Centered = true
+
+			--reset pitch and bank
+			local controls = ba.getControlInfo()
+			controls.Heading = 0
+			controls.Pitch = 0
+		end
+
+	end
+
+	function JoyMouse:ForcePosition_ResetCheck()
+
+		--recall, the cursor has to be shown and cannot be hidden in the same frame to work
+		-- hide the cursor again so we don't see it 1 frame later
+		if self.WasMouseForced then
+			local prev_time = self.TimeWasForced
+			if prev_time ~= nil and mn.getMissionTime() > prev_time then
+
+				io.setCursorHidden(true)
+				self.WasMouseForced = false
+
+			end
+		end
+
+	end	
+
 	function JoyMouse:ControlA(value, centervalue, mousedeadzone, sensitivity_percent, max_delta)
 
 		-- get the actual difference from centerpoint
@@ -232,8 +252,9 @@ $On Game Init: [
 		-- deduct deadzone from the delta
 		-- if within deadzone then delta is 0 and mouse has 'not moved'
 		delta = delta - mousedeadzone
-		if delta < 0 then
+		if delta <= 0 then
 			delta = 0
+			return 0
 		end
 
 		-- scale delta according to defined sensitivity
@@ -359,20 +380,50 @@ $On Game Init: [
 		-- recall raw mouse sensitivity and deadzone goes from 0 to 9
 		-- example: so high would be 400 and low would be 40
 
+		local sensitivity_adjusted_tbl = {}
+		local deadzone_adjusted_tbl = {}
+
+		--make adjusted_tbls, will look like this {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
+		local num_steps = 10
+
+		local step_dead = self.deadzone_info_step_size
+		local step_sens = self.sensitivity_info_step_size
+		local base_dead = self.deadzone_info_min
+		local base_sens = self.sensitivity_info_min
+
+		for i=1,10 do
+			sensitivity_adjusted_tbl[i] = base_sens + ( (i-1) * step_sens)
+			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
+		end
+		
 		local sensitivity_i = 1.0 + io.getMouseSensitivity()
-		local sensitivity_adjusted = {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
-		local sensitivity_percent = sensitivity_adjusted[sensitivity_i]
+		local sensitivity_percent = sensitivity_adjusted_tbl[sensitivity_i]
 		local movement_pixel_max = math.min(center_x, center_y) / 2.25 
+
 		local deadzone_i = 1.0 + io.getJoyDeadzone()
-		local deadzone_adjusted = {0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09}
-		local deadzone_percent = deadzone_adjusted[deadzone_i]
+		local deadzone_percent = deadzone_adjusted_tbl[deadzone_i]
 		local deadzone_pixels = deadzone_percent * (movement_pixel_max/2)
 
-		self.Sensitivity_percent = sensitivity_percent * 2
+		--subtract out deadzone from max moveable pixels
+		movement_pixel_max = movement_pixel_max - deadzone_pixels
+
+		self.Sensitivity_percent = sensitivity_percent
 		self.Movement_pixel_max = movement_pixel_max
 		self.Deadzone_pixels = deadzone_pixels
 
 	end
+
+	function JoyMouse:UnsetLUAControls()
+
+		if self.LUAControlling then
+			ba.setControlMode(NORMAL_CONTROLS)
+			self.LUAControlling = false
+		end
+
+	end
+
+
+	--Gameplay Call Functions
 
 	function JoyMouse:OnFrame()
 
@@ -409,6 +460,9 @@ $On Game Init: [
 			local movement_pixel_max = self.Movement_pixel_max
 			local deadzone_pixels = self.Deadzone_pixels	
 
+			--gr.drawString("movement_pixel_max: "..tostring(movement_pixel_max), 30, 60)
+			--gr.drawString("deadzone_pixels: "..tostring(deadzone_pixels), 30, 90)
+
 			-- get control values		
 			local controls = ba.getControlInfo()
 
@@ -425,8 +479,8 @@ $On Game Init: [
 			local current_h_percent = self:ControlA(mouse_x, mouse_center_x, deadzone_pixels, sensitivity_percent, movement_pixel_max)
 			local current_p_percent = -self.Invert * self:ControlA(mouse_y, mouse_center_y, deadzone_pixels, sensitivity_percent, movement_pixel_max)
 
-			--gr.drawString("current_h_percent: "..tostring(current_h_percent), 30, 20)
-			--gr.drawString("current_p_percent: "..tostring(current_p_percent), 30, 60)
+			--gr.drawString("current_h_percent: "..tostring(current_h_percent), 30, 120)
+			--gr.drawString("current_p_percent: "..tostring(current_p_percent), 30, 150)
 
 			-- increment, not replace the existing values
 			controls.Heading = current_h_percent + controls.Heading
@@ -465,15 +519,6 @@ $On Game Init: [
 
 	end
 
-	function JoyMouse:UnsetLUAControls()
-
-		if self.LUAControlling then
-			ba.setControlMode(NORMAL_CONTROLS)
-			self.LUAControlling = false
-		end
-
-	end
-
 	function JoyMouse:KeyCheck(hvkey)
 
 		if self.Active > 0 and hvkey ~= nil then 
@@ -494,65 +539,119 @@ $On Game Init: [
 
 	end
 
+	function JoyMouse:MissionStart()
+
+		self.Toggleable = true
+		self.Centered = false
+		self:SetPixelValues()
+
+	end
+
+	function JoyMouse:MissionEnd()
+
+		self.Toggleable = false
+		self.Centered = false
+		self:UnsetLUAControls()
+
+	end
+
+	function JoyMouse:FreeLook()
+
+		self.Toggleable = false
+		self.Centered = false
+
+	end
+
+	function JoyMouse:FreeLookEnd()
+
+		self.Toggleable = true
+
+	end
+
 ]
 
 $State: GS_STATE_INITIAL_PLAYER_SELECT
 $On State End: [
+	---if not ba.MultiplayerMode then---
 	--do this here since different pilots might have different settings
 	JoyMouse:SetSettings()
 	JoyMouse:CheckResolution()
+	---end---
+]
+$State: GS_STATE_BARRACKS_MENU
+$On State End: [
+	---if not ba.MultiplayerMode then---
+	JoyMouse:SetSettings()
+	---end---
 ]
 
 $State: GS_STATE_CONTROL_CONFIG
 $On Frame: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:Configure_DrawOptions()
+	---end---
 ]
 $On Mouse Moved: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:Configure_M_Moved()
+	---end---
 ]
 $On Mouse Pressed: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:Configure_M_Clicked()
+	---end---
 ]
 $On State End: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:Configure_End()
+	---end---
 ]
 
 
 $State: GS_STATE_GAME_PLAY
 
 $On State Start: [
-	JoyMouse.Toggleable = true
-	JoyMouse.Centered = false
-	JoyMouse:SetPixelValues()
+	---if not ba.MultiplayerMode then---
+	JoyMouse:MissionStart()
+	---end---
 ]
 
 $On Frame: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:OnFrame()
+	---end---
 ]
 
 $On Key Pressed: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:KeyCheck(hv.Key)
+	---end---
 ]
 
 $On State End: [
-	JoyMouse.Toggleable = false
-	JoyMouse.Centered = false
-	JoyMouse:UnsetLUAControls()
+	---if not ba.MultiplayerMode then---
+	JoyMouse:MissionEnd()
+	---end---
 ]
 
 $Action: Free Look View
 $On Action: [
-	JoyMouse.Toggleable = false
-	JoyMouse.Centered = false
+	---if not ba.MultiplayerMode then---
+	JoyMouse:FreeLook()
+	---end---
 ]
 $On Action Stopped: [
-	JoyMouse.Toggleable = true
+	---if not ba.MultiplayerMode then---
+	JoyMouse:FreeLookEnd()
+	---end---
 ]
 
-;$Action: Toggle Mouse Joystick
-$Action: (Multiplayer) Message All
+
+$Action: Toggle High HUD Contrast
 $On Action: [
+	---if not ba.MultiplayerMode then---
 	JoyMouse:Toggled()
+	---end---
 ]
 
 #End
