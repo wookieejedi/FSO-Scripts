@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.1, released on January 31, 2022 by wookieejedi
+	--Version 1.2, released on February 01, 2022 by wookieejedi
 	--Description: allows the mouse to act like a joystick, and can be toggled on the fly
 	--Usage: Press the Toggle control key during gameplay, or set the value in the controls interface screen
 
@@ -12,13 +12,9 @@ $On Game Init: [
 
 	JoyMouse = {
 
-		--sensitivity settings
-		sensitivity_info_min = 0.80,
-		sensitivity_info_step_size = 0.05,
-
-		--deadzone settings
-		deadzone_info_min = 0.0,
-		deadzone_info_step_size = 0.05,
+		--deadzone settings, controlled by mouse sensitivity in-game
+		deadzone_info_min = 0.1,
+		deadzone_info_step_size = 0.06,
 
 		cfg_filename = "mouse_script.cfg",
 		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'Toggle High HUD Contrast' key.",
@@ -220,7 +216,7 @@ $On Game Init: [
 
 	function JoyMouse:ForcePosition_ResetCheck()
 
-		--recall, the cursor has to be shown and cannot be hidden in the same frame to work
+		-- recall, the cursor has to be shown and cannot be hidden in the same frame to work
 		-- hide the cursor again so we don't see it 1 frame later
 		if self.WasMouseForced then
 			local prev_time = self.TimeWasForced
@@ -234,90 +230,59 @@ $On Game Init: [
 
 	end	
 
-	function JoyMouse:GetPercentFromCenter(value, centervalue, sensitivity_percent, max_delta_from_center)
+	function JoyMouse:DrawArrows(scaled_x, scaled_y, center_x, center_y, percent_deadzone_completed, out_x, out_y, out_of_bounds)
 
-		-- get the actual difference from centerpoint
-		local raw_delta_from_center = value - centervalue
-
-		-- default multiplier to +1
-		local multiplier = 1
-
-		-- if we are handling negative values set multiplier to -1
-		-- and make sure we deal only with positive values
-		local delta_from_center = raw_delta_from_center
-		if delta_from_center < 0 then
-			multiplier = -1
-			delta_from_center = delta_from_center*-1
-		end
-
-		-- scale delta_from_center according to defined sensitivity
-		-- high sensitive: little movement should move mouse a lot (high delta_from_center)
-		-- low sensitive: little movement should move mouse a little (low delta_from_center)
-		local delta_from_center_scaled = ((delta_from_center * sensitivity_percent) / max_delta_from_center)
-		if delta_from_center_scaled > 1 then
-			delta_from_center_scaled = 1
-		end
-
-		-- apply the multiplier
-		delta_from_center_scaled = delta_from_center_scaled * multiplier
-
-		return delta_from_center_scaled
-	end
-
-	function JoyMouse:BoundaryCheck(movement_pixel_max, center_x, center_y, mouse_x, mouse_y)
-
-		if sensitivity == nil or center_x == nil or center_y == nil then return end
-
-		-- Check if mouse is outside sensitivity pixel zone
-		local function force_check(mouse_val, center_val, area_pixel_max)
-			local force_val
-			local multi = 1
-			if mouse_val < 0 then 
-				mouse_val = mouse_val * -1
-				multi = -1
-			end
-			if mouse_val > area_pixel_max + center_val then
-				force_val = (area_pixel_max + center_val) * multi
-			end
-			return force_val
-		end
-
-		local force_x = force_check(mouse_x, center_x, movement_pixel_max)
-		local force_y = force_check(mouse_y, center_y, movement_pixel_max)
-
-		-- reset the cursor to the nearest boundary
-		if force_x ~= nil or force_y ~= nil then
-			self:ForcePosition_1Frame(force_x or mouse_x, force_y or mouse_y)
-		end
-
-	end
-
-	function JoyMouse:DrawArrows(x, y, center_x, center_y, in_deadzone)
-
-		if x == nil or y == nil then return end
+		if scaled_x == nil or scaled_y == nil then return end
 		
 		if hu.HUDDrawn and not hu.HUDDisabledExceptMessages then
 
 			local int
-			if in_deadzone then
-				int = 80
+
+			--check deadzone
+			local disable_arrows = false
+			if percent_deadzone_completed < 1 then
+				int = 150*percent_deadzone_completed --color intensity
+				local int_floor = 40
+				if int < int_floor then
+					int = int_floor
+				end
+				if percent_deadzone_completed < 0.3 then
+					disable_arrows = true
+				end
 			else
 				int = 255
 			end
 
+			local x = scaled_x
+			local y = scaled_y
+
+			local arrow_len = self.ArrowSize or 5
+
+			--draw tiny dot showing where cursor actually is if out of bounds
+			if out_of_bounds then
+				gr.setColor(255, 255, 255, 80)
+				local tracker_circle = arrow_len/4
+				local min = 3
+				if tracker_circle < min then
+					tracker_circle = min
+				end
+				gr.drawCircle(arrow_len/4, out_x, out_y, false)
+			end
+			
 			gr.setColor(255, 255, 255, int)
-			--gr.drawRectangle(center_x - mousesensitivity, center_y - mousesensitivity, center_x + mousesensitivity, center_y + mousesensitivity, false)
-			--gr.drawRectangle(center_x - mousedeadzone, center_y - mousedeadzone, center_x + mousedeadzone, center_y + mousedeadzone, false)
-			gr.drawGradientLine(x, y, x + 20, y - 20)
-			gr.drawGradientLine(x, y, x - 20, y + 20)
-			gr.drawGradientLine(x, y, x + 20, y + 20)
-			gr.drawGradientLine(x, y, x - 20, y - 20)
+
+			gr.drawGradientLine(x, y, x + arrow_len, y - arrow_len)
+			gr.drawGradientLine(x, y, x - arrow_len, y + arrow_len)
+			gr.drawGradientLine(x, y, x + arrow_len, y + arrow_len)
+			gr.drawGradientLine(x, y, x - arrow_len, y - arrow_len)
 
 			-- simple line option
 			--gr.drawGradientLine(x, y, center_x, center_y)
 
 			-- settings here for mouse-direction arrows
-			local arrow_len = 20
+
+			if disable_arrows then return end
+
 			local arrow_angle = math.rad(64)
 
 			-- common calcs
@@ -370,40 +335,35 @@ $On Game Init: [
 		self.Center_y = center_y
 
 		-- get mouse settings 
-		-- recall raw mouse sensitivity and deadzone goes from 0 to 9
+		-- recall raw goes from 0 to 9
 		-- example: so high would be 400 and low would be 40
 
-		local sensitivity_adjusted_tbl = {}
 		local deadzone_adjusted_tbl = {}
 
 		--make adjusted_tbls, will look like this {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
 		local num_steps = 10
 
 		local step_dead = self.deadzone_info_step_size
-		local step_sens = self.sensitivity_info_step_size
 		local base_dead = self.deadzone_info_min
-		local base_sens = self.sensitivity_info_min
+
+		if base_dead <= 0 then
+			base_dead = 1
+		end
 
 		for i=1,num_steps do
-			sensitivity_adjusted_tbl[i] = base_sens + ( (i-1) * step_sens)
 			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
 		end
-		
-		local sensitivity_i = 1.0 + io.getMouseSensitivity()
-		local sensitivity_percent = sensitivity_adjusted_tbl[sensitivity_i]
+
 		local movement_pixel_max = math.min(center_x, center_y) / 2.25 
 
-		local deadzone_i = 1.0 + io.getJoyDeadzone()
+		local deadzone_i = 1.0 + io.getMouseSensitivity()
 		local deadzone_percent = deadzone_adjusted_tbl[deadzone_i]
 		local deadzone_pixels = deadzone_percent * (movement_pixel_max/2)
 
-		--subtract out deadzone from max moveable pixels?
-		--if we do, then high deadzone mean sensitivity much higher once we hop out of the deadzone
-		--movement_pixel_max = movement_pixel_max - deadzone_pixels
-
-		self.Sensitivity_percent = sensitivity_percent
 		self.Movement_pixel_max = movement_pixel_max
 		self.Deadzone_pixels = deadzone_pixels
+		local arrw_size = math.floor(center_y * 0.037) 
+		self.ArrowSize = math.max(arrw_size, 2) --floor it
 
 	end
 
@@ -422,9 +382,6 @@ $On Game Init: [
 	function JoyMouse:OnFrame()
 
 		--recall that this On Frame will only work during gameplay, since that's where the hook is
-
-		--gr.drawString(tostring(io.getMouseX()), 0, 10)
-		--gr.drawString(tostring(io.getMouseY()), 30, 10)
 
 		self:ForcePosition_ResetCheck()
 
@@ -449,72 +406,78 @@ $On Game Init: [
 			local mouse_x = io.getMouseX()
 			local mouse_y = io.getMouseY()
 
-			-- get stashed mouse settings
-			local sensitivity_percent = self.Sensitivity_percent
-			local movement_pixel_max = self.Movement_pixel_max
-			local deadzone_pixels = self.Deadzone_pixels	
+			local bounds_radius = self.Movement_pixel_max
+			local deadzone_radius = self.Deadzone_pixels
 
-			--gr.drawString("movement_pixel_max: "..tostring(movement_pixel_max), 30, 60)
-			--gr.drawString("deadzone_pixels: "..tostring(deadzone_pixels), 30, 90)
+			--get mouse line length, normalized
+			local pixel_delta_x = (mouse_x - mouse_center_x)
+			local pixel_delta_y = (mouse_y - mouse_center_y)
 
-			-- get control values		
-			local controls = ba.getControlInfo()
+			local line_length = math.pow( ((pixel_delta_x*pixel_delta_x) + (pixel_delta_y*pixel_delta_y)), 0.5 )
+			local norm_line_length = 1/line_length
 
-			-- Not really needed it seems...
-				-- make sure we do not go off the boundaries...
-				-- setting the cursor will only do something if we can see the cursor
-				-- self:BoundaryCheck(movement_pixel_max, mouse_center_x, mouse_center_y, mouse_x, mouse_y)
-				-- end of boundaries check
+			--account for if we are in the moving circle or out of bounds
+			local control_normalizer
+			local outofbounds
+			if line_length > bounds_radius then
+				control_normalizer = 1
+				outofbounds = true
+			else
+				control_normalizer = line_length/bounds_radius
+				outofbounds = false
+			end
 
-			-- get the actual control values as a value from 0 to 1
-			-- note, currently this uses movment_pixel_max to get the percent of how far the mouse has moved from center point..
-			-- ..the radius of x and y could be used, but then one would have to move the mouse in the x direciton much farther than y to get the same movement..
-			-- ..and overall the little pixel movement square is small enough that it's okay to use equal amounts in each x and y percent calculation
-			local current_h_percent = self:GetPercentFromCenter(mouse_x, mouse_center_x, sensitivity_percent, movement_pixel_max)
-			local current_p_percent = -self.Invert * self:GetPercentFromCenter(mouse_y, mouse_center_y, sensitivity_percent, movement_pixel_max)
+			local norm_vec = { 
+					x = pixel_delta_x * norm_line_length * control_normalizer, 
+					y = pixel_delta_y * norm_line_length * control_normalizer * -self.Invert
+				}
 
-			--gr.drawString("current_h_percent: "..tostring(current_h_percent), 30, 120)
-			--gr.drawString("current_p_percent: "..tostring(current_p_percent), 30, 150)
-
-			--if within deadzone, do not move
-			--we do this check here, because otherwise there will be a horizontal/vertical strip of deadzone that jump around
-			local deadzone_scale = deadzone_pixels / movement_pixel_max
-
-			local function fastabs(val)
-				if val >= 0 then
-					return val
-				else
-					return val*-1
+			--failsafe for > 1
+			for k,v in pairs(norm_vec) do
+				if v < -1 then
+					norm_vec[k] = -1
+				elseif v > 1 then
+					norm_vec[k] = 1
 				end
 			end
 
-			local controller_h, controller_p
-			local in_deadzone
+			local draw_vec = {
+				x = (norm_vec.x * bounds_radius) + mouse_center_x,
+				y = (norm_vec.y * bounds_radius) + mouse_center_y
+			}
 
-			if (deadzone_scale > fastabs(current_h_percent)) and (deadzone_scale > fastabs(current_p_percent)) then
+			local draw_outbound = {
+				x = pixel_delta_x + mouse_center_x,
+				y = (pixel_delta_y * -self.Invert) + mouse_center_y
+			}
+
+			--deadzone check
+			local controller_h, controller_p
+			local percent_deadzone_completed
+			if line_length < deadzone_radius then
 				controller_h = 0
 				controller_p = 0
-				in_deadzone = true
+				percent_deadzone_completed = line_length/deadzone_radius
 			else
-				controller_h = current_h_percent
-				controller_p = current_p_percent
-				in_deadzone = false
+				controller_h = norm_vec.x
+				controller_p = norm_vec.y
+				percent_deadzone_completed = 1
 			end
 
-			--recall that the mouse still moves the ship like it would normally, having this script on just adds extra juice
-
+			-- get and set control values		
 			-- increment, not replace the existing values
+			-- recall that the mouse still moves the ship like it would normally, having this script on just adds extra juice
+			local controls = ba.getControlInfo()
 			controls.Heading = controller_h + controls.Heading
 			controls.Pitch = controller_p + controls.Pitch
 
-			-- set variables for draw cursor and draw
-			local x = mouse_center_x + (current_h_percent * movement_pixel_max)
-			local y = mouse_center_y + (current_p_percent * movement_pixel_max)
+			self:DrawArrows(draw_vec.x, draw_vec.y, mouse_center_x, mouse_center_y, percent_deadzone_completed, draw_outbound.x, draw_outbound.y, outofbounds)
 
-			self:DrawArrows(x, y, mouse_center_x, mouse_center_y, in_deadzone)
-
-			--gr.drawCircle(deadzone_pixels, mouse_center_x, mouse_center_y, false)
-			--gr.drawCircle(movement_pixel_max, mouse_center_x, mouse_center_y, false)
+			--gr.drawString("Heading: "..tostring(norm_vec.x), 0, 10)
+			--gr.drawString("Pitch: "..tostring(norm_vec.y), 0, 30)
+			--gr.drawCircle(deadzone_radius, mouse_center_x, mouse_center_y, false)
+			--gr.drawCircle(bounds_radius, mouse_center_x, mouse_center_y, false)
+			--gr.drawCircle(2, io.getMouseX(), io.getMouseY(), true)
 
 		--if we can't use the mouse joystick make sure we save that we need to center it again before turning it back on
 		else
