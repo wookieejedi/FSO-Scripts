@@ -12,10 +12,22 @@ $On Game Init: [
 
 	JoyMouse = {
 
-		--deadzone settings, controlled by mouse sensitivity in-game
-		deadzone_info_min = 0.1,
-		deadzone_info_step_size = 0.06,
+		--deadzone and sensitivity settings, controlled by joystick deadzone and sensitivity in-game
 
+		--affects how big the bounding circle is for the mouse to move around in
+		--higher sensitivity setting means smaller bounding circle
+		sensitivity_info_min = 1.5, 
+		sensitivity_info_step_size = 0.12,
+
+		sensitivity_override = nil,
+
+		--deadzone within bounding circle, is affected by bound circle set by sensitivity
+		deadzone_info_min = 0.2,
+		deadzone_info_step_size = 0.08,
+
+		deadzone_override = nil,
+
+		--do not change these values
 		cfg_filename = "mouse_script.cfg",
 		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'Toggle High HUD Contrast' key.",
 		save_needed = false
@@ -195,7 +207,6 @@ $On Game Init: [
 
 		-- reset to zero
 		if self.Active > 0 then
-			--ba.setControlMode(LUA_FULL_CONTROLS)
 
 			local mouse_center_x = mouse_center_x or gr.getScreenWidth() / 2
 			local mouse_center_y = mouse_center_y or gr.getScreenHeight() / 2
@@ -338,27 +349,42 @@ $On Game Init: [
 		-- recall raw goes from 0 to 9
 		-- example: so high would be 400 and low would be 40
 
-		local deadzone_adjusted_tbl = {}
-
 		--make adjusted_tbls, will look like this {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
 		local num_steps = 10
 
 		local step_dead = self.deadzone_info_step_size
 		local base_dead = self.deadzone_info_min
 
+		local step_sens = self.sensitivity_info_step_size
+		local base_sens = self.sensitivity_info_min
+
 		if base_dead <= 0 then
 			base_dead = 1
 		end
 
-		for i=1,num_steps do
-			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
+		if base_sens <= 0 then
+			base_sens = 1
 		end
 
-		local movement_pixel_max = math.min(center_x, center_y) / 2.25 
+		local deadzone_adjusted_tbl = {}
+		local sens_adjusted_tbl = {}
 
-		local deadzone_i = 1.0 + io.getMouseSensitivity()
+		for i=1,num_steps do
+			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
+			sens_adjusted_tbl[i] = base_sens + ( (i-1) * step_sens)
+		end
+
+		local sens_i = 1.0 + io.getJoySensitivity()
+		local sens_percent = sens_adjusted_tbl[sens_i]
+		local movement_pixel_max = self.sensitivity_override or math.min(center_x, center_y) / sens_percent 
+		movement_pixel_max = math.max(movement_pixel_max, 20) --floor it
+
+		local deadzone_i = 1.0 + io.getJoyDeadzone()
 		local deadzone_percent = deadzone_adjusted_tbl[deadzone_i]
-		local deadzone_pixels = deadzone_percent * (movement_pixel_max/2)
+		local deadzone_pixels = self.deadzone_override or deadzone_percent * (movement_pixel_max/2)
+		if deadzone_pixels > movement_pixel_max then --floor it
+			deadzone_pixels = movement_pixel_max / 2
+		end
 
 		self.Movement_pixel_max = movement_pixel_max
 		self.Deadzone_pixels = deadzone_pixels
@@ -394,12 +420,6 @@ $On Game Init: [
 			if self.Centered == nil or self.Centered == false then 
 				self:ResetCenter_InMission(mouse_center_x, mouse_center_y)
 				return
-			end
-
-			--note that LUA_FULL_CONTROLS stops the io.MouseControlStatus from working, so no need to turn it to false
-			if not self.LUAControlling then 
-				ba.setControlMode(LUA_FULL_CONTROLS)
-				self.LUAControlling = true
 			end
 
 			-- get mouse coordinates
@@ -467,6 +487,11 @@ $On Game Init: [
 			-- get and set control values		
 			-- increment, not replace the existing values
 			-- recall that the mouse still moves the ship like it would normally, having this script on just adds extra juice
+			--note that LUA_FULL_CONTROLS stops the io.MouseControlStatus from working, so no need to turn it to false
+			if not self.LUAControlling then 
+				ba.setControlMode(LUA_FULL_CONTROLS)
+				self.LUAControlling = true
+			end
 			local controls = ba.getControlInfo()
 			controls.Heading = controller_h + controls.Heading
 			controls.Pitch = controller_p + controls.Pitch
