@@ -12,6 +12,15 @@ $On Game Init: [
 
 	JoyMouse = {
 
+		--OPTION: force the gauge to use a color, instead of the color of the center reticle
+		use_color_override = false, --set this to true if you want to use a color that is not the center reticle
+		color_override_rgb = {255, 255, 255}, --set the override color here, in {r,g,b} order
+
+		--OPTION: force movements in joystick mode to add to current mouse
+		--with this set to true then the regular mouse controls will occur at the same time (be added to) the joystick mouse controls
+		joymouse_adds_to_current = false,
+
+
 		--deadzone and sensitivity settings, controlled by joystick deadzone and sensitivity in-game
 
 		--affects how big the bounding circle is for the mouse to move around in
@@ -345,7 +354,12 @@ $On Game Init: [
 
 			local arrow_len = self.ArrowSize or 5
 
-			local color = self.ColorVal
+			local color
+			if self.use_color_override then
+				color = self.color_override_rgb
+			else
+				color = self.ColorVal
+			end
 			local r,g,b = color[1], color[2], color[3]
 
 			--draw tiny dot showing where cursor actually is if out of bounds
@@ -486,16 +500,20 @@ $On Game Init: [
 			end
 
 			-- get and set control values		
-			-- increment, not replace the existing values
-			-- recall that the mouse still moves the ship like it would normally, having this script on just adds extra juice
-			--note that LUA_FULL_CONTROLS stops the io.MouseControlStatus from working, so no need to turn it to false
 			if not self.LUAControlling then 
 				ba.setControlMode(LUA_FULL_CONTROLS)
 				self.LUAControlling = true
 			end
 			local controls = ba.getControlInfo()
-			controls.Heading = controller_h + controls.Heading
-			controls.Pitch = controller_p + controls.Pitch
+			if self.joymouse_adds_to_current then
+				-- increment, not replace the existing values, will add to regular mouse controls
+				controls.Heading = controller_h + controls.Heading
+				controls.Pitch = controller_p + controls.Pitch
+			else
+				-- replace, will work in place of regular mouse controls
+				controls.Heading = controller_h
+				controls.Pitch = controller_p
+			end
 
 			self:DrawArrows(draw_vec.x, draw_vec.y, mouse_center_x, mouse_center_y, percent_deadzone_completed, draw_outbound.x, draw_outbound.y, outofbounds)
 
