@@ -1,10 +1,21 @@
+#Global Hooks
+
+$Simulation: [
+	if JoyMouse and JoyMouse.over_start_time then
+		JoyMouse:OnSimulation()
+	end
+]
+
+#End
+
+
 #Conditional Hooks
 
 $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 1.2, released on February 01, 2022 by wookieejedi
+	--Version 1.3, released on March 28, 2022 by wookieejedi
 	--Description: allows the mouse to act like a joystick, and can be toggled on the fly
 	--Usage: Press the Toggle control key during gameplay, or set the value in the controls interface screen
 
@@ -41,6 +52,7 @@ $On Game Init: [
 		tooltip_str = "When enabled, the mouse simulates a joystick,\nmaking it easier to maintain a steady turn speed.\nThis can also be toggled in-game using the\n'Toggle High HUD Contrast' key.",
 		save_needed = false
 	}
+
 
 	--Options Menu Functions
 
@@ -92,7 +104,6 @@ $On Game Init: [
 			self.elements.invert.x2 = self.elements.invert.x1 + 20
 			self.elements.invert.y2 = self.elements.invert.y1 + 20
 		end	
-
 	end
 
     function JoyMouse:Write_cfg()
@@ -136,6 +147,28 @@ $On Game Init: [
 		gr.setColor(127,127,127)
 		gr.drawString("Mouse simulates joystick", self.elements.toggle.x2 + 5, self.elements.toggle.y1 + 5)
 		gr.drawString("Invert Y axis of mouse-joystick", self.elements.invert.x2 + 5, self.elements.invert.y1 + 5)
+
+		if io.MouseControlStatus then
+
+			local center = gr.getScreenWidth()/2
+			local str = "Mouse controls are using Joy-0"
+			local str_width = gr.getStringWidth(str)
+
+			gr.drawString("Mouse controls are using Joy-0", center-str_width, 5)
+			--CONS to Mouse Seperate:
+				--there are only 2 binding slots, so only 2 out of 3 options can be used (keyboard, joystick, seperated mouse, as opposed to keyboard and joystick/mouse)
+				--mouse buttons need to be bound/fixed, since only joy-0 can be set in default controls
+			--PROS to Mouse Seperate
+				--control binding names make sense, especially when new players see that the mouse axes are bound and are able to get that themselves
+				--joy and mouse can be different
+	
+			--CONS to Mouse Same:
+				--Joystick button is forced to do same thing as mouse button
+				--Naming does not make much sense, especially when new players see that the mouse axes are bound and are unable to get that themselves
+			--PROS to Mouse Same:
+				--mouse buttons do not need to be bound, since joydefaults work
+				--can use keyboard button and mouse/joy button (full range of control options at once)
+		end
 
 		if self.ShowTooltip then
 			local x = self.elements.invert.x1
@@ -186,7 +219,7 @@ $On Game Init: [
 		if self.save_needed then
 			self:Write_cfg()
 			self.save_needed = false
-			self:SetCheck()
+			self.Centered = false
 		end
 
 	end
@@ -194,61 +227,14 @@ $On Game Init: [
 
 	--Movement Functions
 
-	function JoyMouse:ForcePosition_1Frame(force_x, force_y)
+	function JoyMouse:UnsetLUAControls()
 
-		-- recall that forcing the cursor to a position only works if the cursor is shown, so show it
-		-- also, the cursor has to be shown and cannot be hidden in the same frame to work
-		-- set it to hide 1 frame later
-		if not self.WasMouseForced then
-
-			io.setCursorHidden(false)
-			io.forceMousePosition(force_x, force_y)
-
-			self.WasMouseForced = true
-			self.TimeWasForced = mn.getMissionTime()
-
+		if self.LUAControlling then
+			ba.setControlMode(NORMAL_CONTROLS)
+			self.LUAControlling = false
 		end
 
 	end
-
-
-	function JoyMouse:ResetCenter_InMission(mouse_center_x, mouse_center_y)
-
-		-- reset to zero
-		if self.Active > 0 then
-
-			local mouse_center_x = mouse_center_x or gr.getScreenWidth() / 2
-			local mouse_center_y = mouse_center_y or gr.getScreenHeight() / 2
-
-			--force to screen center
-			self:ForcePosition_1Frame(mouse_center_x, mouse_center_y)
-
-			--save that it was centered and rehide cursor
-			self.Centered = true
-
-			--reset pitch and bank
-			local controls = ba.getControlInfo()
-			controls.Heading = 0
-			controls.Pitch = 0
-		end
-
-	end
-
-	function JoyMouse:ForcePosition_ResetCheck()
-
-		-- recall, the cursor has to be shown and cannot be hidden in the same frame to work
-		-- hide the cursor again so we don't see it 1 frame later
-		if self.WasMouseForced then
-			local prev_time = self.TimeWasForced
-			if prev_time ~= nil and mn.getMissionTime() > prev_time then
-
-				io.setCursorHidden(true)
-				self.WasMouseForced = false
-
-			end
-		end
-
-	end	
 
 	function JoyMouse:ViewValid()
 
@@ -260,73 +246,18 @@ $On Game Init: [
 
 	end
 
-	function JoyMouse:SetPixelValues()
+	function JoyMouse:ResetDrawValues()
 
-		-- get screen resolution and center coordinates
-		local center_x = gr.getScreenWidth() / 2
-		self.Center_x = center_x
-		local center_y = gr.getScreenHeight() / 2
-		self.Center_y = center_y
-
-		-- get mouse settings 
-		-- recall raw goes from 0 to 9
-		-- example: so high would be 400 and low would be 40
-
-		--make adjusted_tbls, will look like this {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
-		local num_steps = 10
-
-		local step_dead = self.deadzone_info_step_size
-		local base_dead = self.deadzone_info_min
-
-		local step_sens = self.sensitivity_info_step_size
-		local base_sens = self.sensitivity_info_min
-
-		if base_dead <= 0 then
-			base_dead = 1
-		end
-
-		if base_sens <= 0 then
-			base_sens = 1
-		end
-
-		local deadzone_adjusted_tbl = {}
-		local sens_adjusted_tbl = {}
-
-		for i=1,num_steps do
-			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
-			sens_adjusted_tbl[i] = base_sens + ( (i-1) * step_sens)
-		end
-
-		local sens_i = 1.0 + io.getJoySensitivity()
-		local sens_percent = sens_adjusted_tbl[sens_i]
-		local movement_pixel_max = self.sensitivity_override or math.min(center_x, center_y) / sens_percent 
-		movement_pixel_max = math.max(movement_pixel_max, 20) --floor it
-
-		local deadzone_i = 1.0 + io.getJoyDeadzone()
-		local deadzone_percent = deadzone_adjusted_tbl[deadzone_i]
-		local deadzone_pixels = self.deadzone_override or deadzone_percent * (movement_pixel_max/2)
-		if deadzone_pixels > movement_pixel_max then --floor it
-			deadzone_pixels = movement_pixel_max / 2
-		end
-
-		self.Movement_pixel_max = movement_pixel_max
-		self.Deadzone_pixels = deadzone_pixels
-		local arrw_size = math.floor(center_y * 0.037) 
-		self.ArrowSize = math.max(arrw_size, 2) --floor it
+		self.draw_vec_x = 0
+		self.draw_vec_y = 0
+		self.draw_mcenter_x = self.Center_x
+		self.draw_mcenter_y = self.Center_y
+		self.draw_precent_d = 0
+		self.draw_outbound_x = self.Center_x
+		self.draw_outbound_y = self.Center_y
+		self.draw_outbounds = false
 
 	end
-
-	function JoyMouse:UnsetLUAControls()
-
-		if self.LUAControlling then
-			ba.setControlMode(NORMAL_CONTROLS)
-			self.LUAControlling = false
-		end
-
-	end
-
-
-	--Gameplay Call Functions
 
 	function JoyMouse:DrawArrows(scaled_x, scaled_y, center_x, center_y, percent_deadzone_completed, out_x, out_y, out_of_bounds)
 
@@ -422,118 +353,175 @@ $On Game Init: [
 
 	function JoyMouse:OnFrame()
 
-		--recall that this On Frame will only work during gameplay, since that's where the hook is
+		if self.draw_them_arrows then
+			self:DrawArrows(self.draw_vec_x, self.draw_vec_y, self.draw_mcenter_x, self.draw_mcenter_y, self.draw_precent_d, self.draw_outbound_x, self.draw_outbound_y, self.draw_outbounds)
+		end
 
-		self:ForcePosition_ResetCheck()
+	end
 
-		if self.Active > 0 and self.Toggleable and self:ViewValid() and mn.getMissionTime() > 0.1 and io.MouseControlStatus then
+	function JoyMouse:OnSimulation()
+
+		if self.Active > 0 and self.Toggleable and self:ViewValid() and self.over_start_time then
 
 			local mouse_center_x = self.Center_x
 			local mouse_center_y = self.Center_y
 
 			--make sure mouse has been centered
 			if not self.Centered then 
-				self:ResetCenter_InMission(mouse_center_x, mouse_center_y)
-				return
-			end
 
-			-- get mouse coordinates
-			local mouse_x = io.getMouseX()
-			local mouse_y = io.getMouseY()
+				-- force to screen center
+				-- recall that forcing the cursor to a position only works if the cursor is shown, so show it
+				-- also, the cursor has to be shown and cannot be hidden in the same frame to work
+				-- set it to hide 1 frame later
 
-			local bounds_radius = self.Movement_pixel_max
-			local deadzone_radius = self.Deadzone_pixels
+				self.draw_them_arrows = false
+				self:ResetDrawValues()
 
-			--get mouse line length, normalized
-			local pixel_delta_x = (mouse_x - mouse_center_x)
-			local pixel_delta_y = (mouse_y - mouse_center_y)
+				io.setCursorHidden(false)
+				io.forceMousePosition(mouse_center_x, mouse_center_y)
 
-			local line_length = math.pow( ((pixel_delta_x*pixel_delta_x) + (pixel_delta_y*pixel_delta_y)), 0.5 )
-			local norm_line_length = 1/line_length
+				self.WasMouseForced = true
+				self.TimeWasForced = mn.getMissionTime()
 
-			--account for if we are in the moving circle or out of bounds
-			local control_normalizer
-			local outofbounds
-			if line_length > bounds_radius then
-				control_normalizer = 1
-				outofbounds = true
+				--save that it was centered
+				self.Centered = true
+
+				--reset pitch and bank
+				local controls = ba.getControlInfo()
+				controls.Heading = 0
+				controls.Pitch = 0
+
 			else
-				control_normalizer = line_length/bounds_radius
-				outofbounds = false
-			end
 
-			local norm_vec = { 
-					x = pixel_delta_x * norm_line_length * control_normalizer, 
-					y = pixel_delta_y * norm_line_length * control_normalizer * -self.Invert
+				-- recall, the cursor has to be shown and cannot be hidden in the same frame to work
+				-- hide the cursor again so we don't see it 1 frame later
+				if self.WasMouseForced then
+					local prev_time = self.TimeWasForced
+					local center_help_time = 0.02 --0.02 works well and is slightly longer then 1 frame at 60 fps
+					if prev_time ~= nil and (mn.getMissionTime() > (prev_time+center_help_time)) then
+						io.setCursorHidden(true)
+						self.WasMouseForced = false
+					end
+				end
+
+				-- get mouse coordinates
+				local mouse_x = io.getMouseX()
+				local mouse_y = io.getMouseY()
+
+				local bounds_radius = self.Movement_pixel_max
+				local deadzone_radius = self.Deadzone_pixels
+
+				--get mouse line length, normalized
+				local pixel_delta_x = (mouse_x - mouse_center_x)
+				local pixel_delta_y = (mouse_y - mouse_center_y)
+
+				local line_length = math.pow( ((pixel_delta_x*pixel_delta_x) + (pixel_delta_y*pixel_delta_y)), 0.5 )
+				local norm_line_length = 1/line_length
+
+				--account for if we are in the moving circle or out of bounds
+				local control_normalizer
+				local outofbounds
+				if line_length > bounds_radius then
+					control_normalizer = 1
+					outofbounds = true
+				else
+					control_normalizer = line_length/bounds_radius
+					outofbounds = false
+				end
+
+				local norm_vec = { 
+						x = pixel_delta_x * norm_line_length * control_normalizer, 
+						y = pixel_delta_y * norm_line_length * control_normalizer * -self.Invert
+					}
+
+				--failsafe for > 1
+				for k,v in pairs(norm_vec) do
+					if v < -1 then
+						norm_vec[k] = -1
+					elseif v > 1 then
+						norm_vec[k] = 1
+					end
+				end
+
+				local draw_vec = {
+					x = (norm_vec.x * bounds_radius) + mouse_center_x,
+					y = (norm_vec.y * bounds_radius) + mouse_center_y
 				}
 
-			--failsafe for > 1
-			for k,v in pairs(norm_vec) do
-				if v < -1 then
-					norm_vec[k] = -1
-				elseif v > 1 then
-					norm_vec[k] = 1
+				local draw_outbound = {
+					x = pixel_delta_x + mouse_center_x,
+					y = (pixel_delta_y * -self.Invert) + mouse_center_y
+				}
+
+				--deadzone check
+				local controller_h, controller_p
+				local percent_deadzone_completed
+				if line_length < deadzone_radius then
+					controller_h = 0
+					controller_p = 0
+					percent_deadzone_completed = line_length/deadzone_radius
+				else
+					controller_h = norm_vec.x
+					controller_p = norm_vec.y
+					percent_deadzone_completed = 1
 				end
+
+				-- get and set control values		
+				if not self.LUAControlling then 
+					ba.setControlMode(LUA_STEERING_CONTROLS)
+					self.LUAControlling = true
+				end
+				local controls = ba.getControlInfo()
+				if self.joymouse_adds_to_current then
+					-- increment, not replace the existing values, will add to regular mouse controls
+					controls.Heading = controller_h + controls.Heading
+					controls.Pitch = controller_p + controls.Pitch
+				else
+					-- replace, will work in place of regular mouse controls
+					controls.Heading = controller_h
+					controls.Pitch = controller_p
+				end
+
+				self.draw_them_arrows = true
+
+				self.draw_vec_x = draw_vec.x
+				self.draw_vec_y = draw_vec.y
+				self.draw_mcenter_x = mouse_center_x
+				self.draw_mcenter_y = mouse_center_y
+				self.draw_precent_d = percent_deadzone_completed
+				self.draw_outbound_x = draw_outbound.x
+				self.draw_outbound_y = draw_outbound.y
+				self.draw_outbounds = outofbounds
+
+				--gr.drawString("Heading: "..tostring(norm_vec.x), 0, 10)
+				--gr.drawString("Pitch: "..tostring(norm_vec.y), 0, 30)
+				--gr.drawCircle(deadzone_radius, mouse_center_x, mouse_center_y, false)
+				--gr.drawCircle(bounds_radius, mouse_center_x, mouse_center_y, false)
+				--gr.drawCircle(2, io.getMouseX(), io.getMouseY(), true)
+
 			end
 
-			local draw_vec = {
-				x = (norm_vec.x * bounds_radius) + mouse_center_x,
-				y = (norm_vec.y * bounds_radius) + mouse_center_y
-			}
-
-			local draw_outbound = {
-				x = pixel_delta_x + mouse_center_x,
-				y = (pixel_delta_y * -self.Invert) + mouse_center_y
-			}
-
-			--deadzone check
-			local controller_h, controller_p
-			local percent_deadzone_completed
-			if line_length < deadzone_radius then
-				controller_h = 0
-				controller_p = 0
-				percent_deadzone_completed = line_length/deadzone_radius
-			else
-				controller_h = norm_vec.x
-				controller_p = norm_vec.y
-				percent_deadzone_completed = 1
-			end
-
-			-- get and set control values		
-			if not self.LUAControlling then 
-				ba.setControlMode(LUA_FULL_CONTROLS)
-				self.LUAControlling = true
-			end
-			local controls = ba.getControlInfo()
-			if self.joymouse_adds_to_current then
-				-- increment, not replace the existing values, will add to regular mouse controls
-				controls.Heading = controller_h + controls.Heading
-				controls.Pitch = controller_p + controls.Pitch
-			else
-				-- replace, will work in place of regular mouse controls
-				controls.Heading = controller_h
-				controls.Pitch = controller_p
-			end
-
-			self:DrawArrows(draw_vec.x, draw_vec.y, mouse_center_x, mouse_center_y, percent_deadzone_completed, draw_outbound.x, draw_outbound.y, outofbounds)
-
-			--gr.drawString("Heading: "..tostring(norm_vec.x), 0, 10)
-			--gr.drawString("Pitch: "..tostring(norm_vec.y), 0, 30)
-			--gr.drawCircle(deadzone_radius, mouse_center_x, mouse_center_y, false)
-			--gr.drawCircle(bounds_radius, mouse_center_x, mouse_center_y, false)
-			--gr.drawCircle(2, io.getMouseX(), io.getMouseY(), true)
-
-		--if we can't use the mouse joystick make sure we save that we need to center it again before turning it back on
 		else
 			--reset lua controls (this function also checks if LUA controls are on)
 			self:UnsetLUAControls()
+
+			--if we can't use the mouse joystick make sure we save that we need to center it again before turning it back on
 			--set centering value if needed
 			if self.Centered then
 				self.Centered = false
 			end	
+
+			if self.draw_them_arrows then
+				self.draw_them_arrows = false
+				self:ResetDrawValues()
+			end
+
 		end
 
 	end
+
+
+	--Gameplay Setup and Toggling
 
 	function JoyMouse:Toggled()
 
@@ -544,7 +532,7 @@ $On Game Init: [
 			self:UnsetLUAControls()
 			self.Centered = false
 			--play a fun 2d noise
-			mn.runSEXP("(play-sound-from-table 0 0 0 43)")
+			ad.playInterfaceSoundByName("4")
 
 		end
 
@@ -553,33 +541,90 @@ $On Game Init: [
 	function JoyMouse:KeyCheck(hvkey)
 
 		if self.Active > 0 and hvkey ~= nil then 
+			--recall, Esc does not trigger a different game state, check F keys just for redundancy
 			if hvkey == "Esc" or hvkey == "F1" or hvkey == "F2" or hvkey == "F3" or hvkey == "F4" then
-				self:SetCheck()
-			end
-		end
-
-	end
-	
-	function JoyMouse:SetCheck()
-
-		if self.Active > 0 then
-			if self.Centered then
 				self.Centered = false
 			end
 		end
 
 	end
 
-	function JoyMouse:MissionStart()
+	function JoyMouse:SetPixelValues()
+
+		-- get screen resolution and center coordinates
+		local center_x = gr.getScreenWidth() / 2
+		self.Center_x = center_x
+		local center_y = gr.getScreenHeight() / 2
+		self.Center_y = center_y
+
+		-- get mouse settings 
+		-- recall raw goes from 0 to 9
+		-- example: so high would be 400 and low would be 40
+
+		--make adjusted_tbls, will look like this {0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}
+		local num_steps = 10
+
+		local step_dead = self.deadzone_info_step_size
+		local base_dead = self.deadzone_info_min
+
+		local step_sens = self.sensitivity_info_step_size
+		local base_sens = self.sensitivity_info_min
+
+		if base_dead <= 0 then
+			base_dead = 1
+		end
+
+		if base_sens <= 0 then
+			base_sens = 1
+		end
+
+		local deadzone_adjusted_tbl = {}
+		local sens_adjusted_tbl = {}
+
+		for i=1,num_steps do
+			deadzone_adjusted_tbl[i] = base_dead + ( (i-1) * step_dead)
+			sens_adjusted_tbl[i] = base_sens + ( (i-1) * step_sens)
+		end
+
+		local sens_i = 1.0 + io.getJoySensitivity()
+		local sens_percent = sens_adjusted_tbl[sens_i]
+		local movement_pixel_max = self.sensitivity_override or math.min(center_x, center_y) / sens_percent 
+		movement_pixel_max = math.max(movement_pixel_max, 20) --floor it
+
+		local deadzone_i = 1.0 + io.getJoyDeadzone()
+		local deadzone_percent = deadzone_adjusted_tbl[deadzone_i]
+		local deadzone_pixels = self.deadzone_override or deadzone_percent * (movement_pixel_max/2)
+		if deadzone_pixels > movement_pixel_max then --floor it
+			deadzone_pixels = movement_pixel_max / 2
+		end
+
+		self.Movement_pixel_max = movement_pixel_max
+		self.Deadzone_pixels = deadzone_pixels
+		local arrw_size = math.floor(center_y * 0.037) 
+		self.ArrowSize = math.max(arrw_size, 2) --floor it
+
+	end
+
+	function JoyMouse:MissionSetup()
+
+		self.draw_them_arrows = false
+
+		self.over_start_time = false
+		async.run(function()
+			async.await(mn.waitAsync(0.1))
+			self.over_start_time = true
+		end)
+
+	end
+
+	function JoyMouse:EnterMissionState()
 
 		self.Toggleable = true
 		self.Centered = false
 		self:SetPixelValues()
 		local r,g,b,i = hu.getHUDGaugeColor(9) --center reticle
 		self.ColorVal = {r,g,b,i}
-
-		self.WasMouseForced = false
-		self.TimeWasForced = 0
+		self:ResetDrawValues()
 
 	end
 
@@ -589,8 +634,9 @@ $On Game Init: [
 		self.Centered = false
 		self:UnsetLUAControls()
 
-		self.WasMouseForced = false
-		self.TimeWasForced = 0
+		self.draw_them_arrows = false
+		self.over_start_time = false
+		self:ResetDrawValues()
 
 	end
 
@@ -650,9 +696,11 @@ $On State End: [
 $State: GS_STATE_GAME_PLAY
 
 $On State Start: [
-	---if not ba.MultiplayerMode then---
-	JoyMouse:MissionStart()
-	---end---
+	JoyMouse:EnterMissionState()
+]
+
+$On Gameplay Start: [
+	JoyMouse:MissionSetup()
 ]
 
 $On Frame: [
@@ -662,9 +710,7 @@ $On Frame: [
 ]
 
 $On Key Pressed: [
-	---if not ba.MultiplayerMode then---
 	JoyMouse:KeyCheck(hv.Key)
-	---end---
 ]
 
 $On State End: [
@@ -680,16 +726,13 @@ $On Action: [
 	---end---
 ]
 $On Action Stopped: [
-	---if not ba.MultiplayerMode then---
 	JoyMouse:FreeLookEnd()
-	---end---
 ]
 
+;$Action: Toggle Mouse Joystick
 $Action: Toggle High HUD Contrast
 $On Action: [
-	---if not ba.MultiplayerMode then---
 	JoyMouse:Toggled()
-	---end---
 ]
 
 #End
