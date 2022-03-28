@@ -248,8 +248,8 @@ $On Game Init: [
 
 	function JoyMouse:ResetDrawValues()
 
-		self.draw_vec_x = 0
-		self.draw_vec_y = 0
+		self.draw_vec_x = self.Center_x
+		self.draw_vec_y = self.Center_y
 		self.draw_mcenter_x = self.Center_x
 		self.draw_mcenter_y = self.Center_y
 		self.draw_precent_d = 0
@@ -257,11 +257,13 @@ $On Game Init: [
 		self.draw_outbound_y = self.Center_y
 		self.draw_outbounds = false
 
+		self.draw_them_arrows = false
+
 	end
 
 	function JoyMouse:DrawArrows(scaled_x, scaled_y, center_x, center_y, percent_deadzone_completed, out_x, out_y, out_of_bounds)
 
-		if hu.HUDDrawn and not hu.HUDDisabledExceptMessages then
+		if hu.HUDDrawn and not hu.HUDDisabledExceptMessages and self.over_start_time then
 
 			local int
 
@@ -303,7 +305,7 @@ $On Game Init: [
 				end
 				gr.drawCircle(arrow_len/4, out_x, out_y, false)
 			end
-			
+
 			gr.setColor(r, g, b, int)
 
 			gr.drawGradientLine(x, y, x + arrow_len, y - arrow_len)
@@ -351,7 +353,7 @@ $On Game Init: [
 
 	end
 
-	function JoyMouse:OnFrame()
+	function JoyMouse:OnHUDDraw()
 
 		if self.draw_them_arrows then
 			self:DrawArrows(self.draw_vec_x, self.draw_vec_y, self.draw_mcenter_x, self.draw_mcenter_y, self.draw_precent_d, self.draw_outbound_x, self.draw_outbound_y, self.draw_outbounds)
@@ -374,7 +376,6 @@ $On Game Init: [
 				-- also, the cursor has to be shown and cannot be hidden in the same frame to work
 				-- set it to hide 1 frame later
 
-				self.draw_them_arrows = false
 				self:ResetDrawValues()
 
 				io.setCursorHidden(false)
@@ -512,7 +513,6 @@ $On Game Init: [
 			end	
 
 			if self.draw_them_arrows then
-				self.draw_them_arrows = false
 				self:ResetDrawValues()
 			end
 
@@ -532,7 +532,8 @@ $On Game Init: [
 			self:UnsetLUAControls()
 			self.Centered = false
 			--play a fun 2d noise
-			ad.playInterfaceSoundByName("4")
+			mn.runSEXP("(play-sound-from-table 0 0 0 43)")
+			--play interface sound does not work with throttle sounds, so keep using play sexp sound
 
 		end
 
@@ -620,10 +621,10 @@ $On Game Init: [
 	function JoyMouse:EnterMissionState()
 
 		self.Toggleable = true
-		self.Centered = false
 		self:SetPixelValues()
 		local r,g,b,i = hu.getHUDGaugeColor(9) --center reticle
 		self.ColorVal = {r,g,b,i}
+		self.Centered = false
 		self:ResetDrawValues()
 
 	end
@@ -634,7 +635,6 @@ $On Game Init: [
 		self.Centered = false
 		self:UnsetLUAControls()
 
-		self.draw_them_arrows = false
 		self.over_start_time = false
 		self:ResetDrawValues()
 
@@ -703,10 +703,8 @@ $On Gameplay Start: [
 	JoyMouse:MissionSetup()
 ]
 
-$On Frame: [
-	---if not ba.MultiplayerMode then---
-	JoyMouse:OnFrame()
-	---end---
+$On HUD Draw: [
+	JoyMouse:OnHUDDraw()
 ]
 
 $On Key Pressed: [
