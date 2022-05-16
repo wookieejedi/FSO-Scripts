@@ -566,11 +566,11 @@ $On Game Init: [
 		local base_sens = self.Sensitivity_info_min
 
 		if base_dead <= 0 then
-			base_dead = 1
+			base_dead = 0
 		end
 
 		if base_sens <= 0 then
-			base_sens = 1
+			base_sens = 0
 		end
 
 		local deadzone_adjusted_tbl = {}
