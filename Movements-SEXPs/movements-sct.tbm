@@ -833,15 +833,15 @@ $On Game Init: [
 	end
 
 	function Movements:Remove_Wpt_trk_Object(waypointname_key)
-	
+
 		if waypointname_key == nil then return end
 		local entry = self.Active_Wpts_trk_Objects[waypointname_key]
-		
+
 		if entry ~= nil then
 			self.Active_Wpts_trk_Objects[waypointname_key] = nil
 			self.Active_Wpts_trk_Objects_Sum = self.Active_Wpts_trk_Objects_Sum - 1
 		end
-		
+
 	end
 
 	mn.LuaSEXPs["add-waypoint-track-ship"].Action = function(shiptarget, waypointpath, waypoint_i, offset_x, offset_y, offset_z, track_interval, track_distance, userelative)
@@ -1084,18 +1084,7 @@ $On Game Init: [
 		--only continue if the completed waypoint was the one specified in tracker goal
 		if entry.waypoint_path_name ~= done_wp_path_name then return end
 
-		--if there is a target orientation then run rotate-to-orientation sexp
-		if self:PBHisValid(entry.final_pbh) and self.Active_Rotations[shipname] == nil then
-			--need time delay so the craft is not moving forward anymore
-			local rotate_delay = self:TimeUntilStop(shipname)
-			--calculate how long until it stops
-
-			local rotate_time = -1 --for default rotate time
-			self:Add_Rotation(shipname, entry.final_pbh, rotate_delay, rotate_time, entry.play_dead_PR, entry.final_pbh_target_name)
-		--if not valid final orientation then don't run rotate-to-orientation
-		end
-
-		--change status
+		--change status, this is the only time this gets set to false (besides initiation)
 		entry.is_running_waypoints_once = false
 
 		--save last known waypoint location
@@ -1108,6 +1097,22 @@ $On Game Init: [
 					entry.previous_waypoint_location = lastwp.Position
 				end
 			end
+		end
+
+		--if there is a target orientation and no active rotations then add a run rotation order
+			--recall that continuous checking of target pbh is done in ':Check_Ship_trk_Wpt()'
+		if self:PBHisValid(entry.final_pbh) and self.Active_Rotations[shipname] == nil then
+
+			--recall the ship just finished a waypoint..
+			--need time delay so the craft is not moving forward anymore
+			--calculate how long until it stops
+			local rotate_delay = self:TimeUntilStop(shipname)
+			local rotate_time = -1 --for default rotate time
+
+			--add rotation
+			self:Add_Rotation(shipname, entry.final_pbh, rotate_delay, rotate_time, entry.play_dead_PR, entry.final_pbh_target_name)
+
+		--if not valid final orientation then don't run rotate-to-orientation
 		end
 
 	end
@@ -1156,14 +1161,21 @@ $On Game Init: [
 								--if the ship does not have resume the waypoint order then
 								--check if we are using the option to always match orientations
 								--if so, then run the rotate order if the previous orientation is substantially different and not actively rotating
+								--recall inital rotating to target pbh was already called when waypoint path was completed on :Pause_Ship_trk_Wpt()
 								if v.continuous_pbh_check and self.Active_Rotations[v.shipname] == nil then
+
+									--only using 'get final PBH' to check if current and final orientations are equal or not
+									--recall that 'get final PBH checks' for validity 
 									local fo = self:GetFinal_PBH(v.shipname, v.final_pbh, v.final_pbh_target_name) --final_pbh in {p=,b=,h=}
 									if not self:Orientations_are_Equal(ship.Orientation, fo, 0.02) then 
+
+										--orientations are not equal, so add rotation order
 										local rotate_time = -1 --for default rotate time
 										local rotate_delay = 1
 										self:Add_Rotation(v.shipname, v.final_pbh, rotate_delay, rotate_time, v.play_dead_PR, v.final_pbh_target_name)
-										--^ add rotation updates the previous pitch, bank, heading of any ship in the Active_Ships_trk_Wpts
+
 									end
+
 								end
 
 							end
