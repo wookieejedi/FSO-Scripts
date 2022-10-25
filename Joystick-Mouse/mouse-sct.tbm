@@ -129,32 +129,36 @@ $On Game Init: [
 		gr.setColor(53,53,167)
 
 		gr.drawRectangle(self.elements.toggle.x1, self.elements.toggle.y1, self.elements.toggle.x2, self.elements.toggle.y2, false)
-		if self.Active > 0 then
+		if self.Active == 1 then
 			gr.drawLine(self.elements.toggle.x1, self.elements.toggle.y1, self.elements.toggle.x2, self.elements.toggle.y2)
 			gr.drawLine(self.elements.toggle.x1, self.elements.toggle.y2, self.elements.toggle.x2, self.elements.toggle.y1)
-		end
-
-		if self.Active < 0 then
+		else
 			gr.setColor(63,63,63)
 		end
 
 		gr.drawRectangle(self.elements.invert.x1, self.elements.invert.y1, self.elements.invert.x2, self.elements.invert.y2, false)
-		if self.Invert > 0 then
+		if self.Invert == 1 then
 			gr.drawLine(self.elements.invert.x1, self.elements.invert.y1, self.elements.invert.x2, self.elements.invert.y2)
 			gr.drawLine(self.elements.invert.x1, self.elements.invert.y2, self.elements.invert.x2, self.elements.invert.y1)
 		end
 
-		gr.setColor(127,127,127)
+		gr.setColor(195,195,195)
 		gr.drawString("Mouse simulates joystick", self.elements.toggle.x2 + 5, self.elements.toggle.y1 + 5)
 		gr.drawString("Invert Y axis of mouse-joystick", self.elements.invert.x2 + 5, self.elements.invert.y1 + 5)
 
 		if io.MouseControlStatus then
 
+			local saved_font = gr.CurrentFont
+			gr.CurrentFont = gr.Fonts["font_e18"]
+
 			local center = gr.getScreenWidth()/2
 			local str = "Mouse controls are using Joy-0"
 			local str_width = gr.getStringWidth(str)
 
-			gr.drawString("Mouse controls are using Joy-0", center-str_width, 5)
+			gr.drawString(str, center-str_width, 5)
+
+			gr.CurrentFont = saved_font
+
 			--CONS to Mouse Seperate:
 				--there are only 2 binding slots, so only 2 out of 3 options can be used (keyboard, joystick, seperated mouse, as opposed to keyboard and joystick/mouse)
 				--mouse buttons need to be bound/fixed, since only joy-0 can be set in default controls
@@ -201,13 +205,17 @@ $On Game Init: [
 		local x = io.getMouseX()
 		local y = io.getMouseY()
 		if x > self.elements.toggle.x1 and x < self.elements.toggle.x2 and y > self.elements.toggle.y1 and y < self.elements.toggle.y2 then
-			self.Active = -self.Active
+			if self.Active ~= nil then
+				self.Active = -self.Active
+			end
 			ad.playInterfaceSoundByName("0")
 			self.Save_needed = true
 		end
-		--removed `self.Active > 0 and` condition because in-game toggle was added 
+		--removed `self.Active == 1 and` condition because in-game toggle was added 
 		if x > self.elements.invert.x1 and x < self.elements.invert.x2 and y > self.elements.invert.y1 and y < self.elements.invert.y2 then
-			self.Invert = -self.Invert
+			if self.Invert ~= nil then
+				self.Invert = -self.Invert
+			end
 			ad.playInterfaceSoundByName("0")
 			self.Save_needed = true
 		end
@@ -337,19 +345,36 @@ $On Game Init: [
 
 	end
 
-	function JoyMouse:CanRun()
+	function JoyMouse:Check_Set_Can_Run()
+
+		local answer
 
 		if self.Toggleable and self.over_start_time and not gr.hasViewmode(VM_FREECAMERA) and not gr.hasViewmode(VM_EXTERNAL) and (gr.hasViewmode(VM_INTERNAL) or gr.hasViewmode(VM_CHASE)) then 
-			return true
+
+			--check if multi observer ship
+			if ba.MultiplayerMode then
+				local ply = hv.Player
+				if ply ~= nil and ply:isValid() and ply:getBreedName() == "Ship" then
+					answer = true
+				else
+					answer = false
+				end
+			else
+				answer = true
+			end
+
 		else
-			return false
+			answer = false
 		end
+
+		self.Can_Run = answer
+		return answer
 
 	end
 
 	function JoyMouse:OnHUDDraw()
 
-		if self.Active > 0 and self:CanRun() and hu.HUDDrawn and not hu.HUDDisabledExceptMessages and not self.NeedsCentered and not self.MouseNeedsHidden then
+		if self.Active == 1 and self.Can_Run and hu.HUDDrawn and not hu.HUDDisabledExceptMessages and not self.NeedsCentered and not self.MouseNeedsHidden then
 			self:DrawArrows(self.DrawVal_vec_x, self.DrawVal_vec_y, self.DrawVal_mcenter_x, self.DrawVal_mcenter_y, self.DrawVal_precent_deadzone, self.DrawVal_outbound_x, self.DrawVal_outbound_y, self.DrawVal_outbounds)
 		end
 
@@ -357,7 +382,7 @@ $On Game Init: [
 
 	function JoyMouse:OnSimulation()
 
-		if self.Active > 0 and self:CanRun() then
+		if self.Active == 1 and self:Check_Set_Can_Run() then
 
 			local mouse_center_x = self.Center_x
 			local mouse_center_y = self.Center_y
@@ -517,7 +542,7 @@ $On Game Init: [
 
 	function JoyMouse:Toggled()
 
-		if self:CanRun() then
+		if self:Check_Set_Can_Run() then
 
 			self.Active = -self.Active
 			self:Write_cfg()
@@ -525,8 +550,7 @@ $On Game Init: [
 			self.NeedsCentered = true
 			self:ResetDrawValues()
 			--play a fun 2d noise
-			mn.runSEXP("(play-sound-from-table 0 0 0 43)")
-			--play interface sound does not work with throttle sounds, so keep using play sexp sound
+			ad.playGameSound(43)
 
 		end
 
@@ -534,7 +558,7 @@ $On Game Init: [
 
 	function JoyMouse:KeyCheck(hvkey)
 
-		if self.Active > 0 and hvkey ~= nil then 
+		if self.Active == 1 and hvkey ~= nil then 
 			--recall, Esc does not trigger a different game state, check F keys just for redundancy
 			if hvkey == "Esc" or hvkey == "F1" or hvkey == "F2" or hvkey == "F3" or hvkey == "F4" then
 				self.NeedsCentered = true
@@ -610,26 +634,24 @@ $On Game Init: [
 
 	end
 
-	function JoyMouse:EnterMissionState()
+	function JoyMouse:ResetMissionState(on_mission_start)
 
-		self.Toggleable = true
-		self:SetPixelValues()
-		local r,g,b,i = hu.getHUDGaugeColor(9) --center reticle
-		self.ColorVal = {r,g,b,i}
+		if on_mission_start then
+			self:SetPixelValues()
+			local r,g,b,i = hu.getHUDGaugeColor(9) --center reticle
+			self.ColorVal = {r,g,b,i}
+		else
+			self:UnsetLUAControls()
+			self.over_start_time = false		
+			self.Can_Run = false
+		end
+
+		self.Toggleable = on_mission_start
 		self.NeedsCentered = true
 		self:ResetDrawValues()
 
 	end
 
-	function JoyMouse:MissionEnd()
-
-		self.Toggleable = false
-		self.NeedsCentered = true
-		self:ResetDrawValues()
-		self:UnsetLUAControls()
-		self.over_start_time = false
-
-	end
 
 	function JoyMouse:FreeLook()
 
@@ -688,7 +710,7 @@ $On State End: [
 $State: GS_STATE_GAME_PLAY
 
 $On State Start: [
-	JoyMouse:EnterMissionState()
+	JoyMouse:ResetMissionState(true)
 ]
 
 $On Gameplay Start: [
@@ -705,7 +727,7 @@ $On Key Pressed: [
 
 $On State End: [
 	---if not ba.MultiplayerMode then---
-	JoyMouse:MissionEnd()
+	JoyMouse:ResetMissionState(false)
 	---end---
 ]
 
