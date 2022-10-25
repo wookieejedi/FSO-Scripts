@@ -149,7 +149,7 @@ $On Game Init: [
 		if io.MouseControlStatus then
 
 			local saved_font = gr.CurrentFont
-			gr.CurrentFont = gr.Fonts["font_e18"]
+			gr.CurrentFont = gr.Fonts[1]
 
 			local center = gr.getScreenWidth()/2
 			local str = "Mouse controls are using Joy-0"
