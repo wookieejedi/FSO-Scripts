@@ -1,6 +1,9 @@
 # Custom-Wingmen-Gauge
 Script files for wookieejedi's custom wingmen gauge for Freespace 2 Open. 
 
+**Not actively maintained anymore as most of these features are in the actual engine now. **
+
+
 See main topic here:
 https://www.hard-light.net/forums/index.php?topic=95180.0
 
