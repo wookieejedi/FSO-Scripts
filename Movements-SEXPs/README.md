@@ -66,7 +66,7 @@ Sets the deceleration time of a given ship. Setting this to 0 will ensure that s
 
 
 Usage:
-Download these two tbm files listed within in this Github Folder (click the link to open the file on the web, then right click the `Raw` button and click `Save As`. Once downloaded, place them in your data/tables folder. Then just open FRED and you will see a new listing called LUA-Movements where all the sexps are located. There are detailed descriptions of each sexp and each argument. 
+Download these two tbm files listed within in this Github Folder (click the link to open the file on the web, then right click the `Raw` button and click `Save As`). Once downloaded, place them in your data/tables folder. Then just open FRED and you will see a new listing called LUA-Movements where all the sexps are located. There are detailed descriptions of each sexp and each argument. 
 
 Important! You need an FSO build of August 24, 2022 or newer for these to work.
 
