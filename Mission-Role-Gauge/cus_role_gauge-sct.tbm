@@ -4,7 +4,7 @@ $Application: FS2_Open
 
 $On Game Init: [
 
-	--Version 0.4, released on June 17, 2020 by wookieejedi
+	--Version 0.5, released on May 22, 2023 by wookieejedi
 	Object_Info_Help = {} --makes a global variable! This is the only global variable this script creates. 
 	
 	---------------------------------
@@ -18,9 +18,9 @@ $On Game Init: [
 	--Object_Info_Help.start_point states where to start drawing the gauge. 
 		--Options for x include "left", "middle", and "right"
 		--Options for y include "top", "middle", and "bottom"
-	Object_Info_Help.origin = { x = 1.0, y = 0.0 }
-	Object_Info_Help.offset = { x = -300, y = 10 }
-	Object_Info_Help.start_point = { x = "right", y = "top" }
+	Object_Info_Help.origin = { x = 0.2, y = 0.0 }
+	Object_Info_Help.offset = { x = 0, y = 10 }
+	Object_Info_Help.start_point = { x = "left", y = "top" }
 	-----------------
 	
 	--Width
@@ -33,13 +33,11 @@ $On Game Init: [
 	-----------------
 	
 	--Font	
-	--To set custom fonts for the gauge to use change the values of 'medium_resolution' and 'low_resolution' and 'high_resolution:
-	--Each value can be an integer index or font file name listed in fonts.tbl.
-	--If the font specific does not exist, the gauge will use the respective font listed in fonts.tbl.
-	--For reference font 1 is medium size, font 2 is large size, and font 3 is small size 
-	--If the player's screen is > 3200 pixels the gauge will use the high_resolution font
-	--If the player's screen is <= 1024 pixels the gauge will use the low_resolution font
-	Object_Info_Help.fonts = {medium_resolution = 4, low_resolution = 6, high_resolution = 5}
+	--To set custom fonts set the integer index or font file name listed in fonts.tbl.
+	--If the font specific does not exist, the gauge will use the font of the directives gauge. 
+	--For example, to make the font_key 'font01', just replace 'nil' with "font01".
+	--IE Object_Info_Help.font_key = "font01"
+	Object_Info_Help.font_key = nil
 
 	--Gauge Title
 	--To set the default title of the gauge simpy change the string value 
@@ -59,20 +57,47 @@ $On Game Init: [
 	
 
 	--reset all 
-	function Object_Info_Help:Reset()
+	function Object_Info_Help:Reset(mission_is_going)
+
+		self.mission_is_going = mission_is_going
 		self.object_role_list = {}
 		self.gauge_title = self.gauge_title_default
 		self.isactive = false
 		self.seperator = ": "
+		self.origin_mission = {x=self.origin.x, y=self.origin.y}
+		self.offset_mission = {x=self.offset.x, y=self.offset.y}
+
 	end
-	
+
 	--sets gauge color
-	function Object_Info_Help:setcolor()
-		local indexgag = 37
-		self.basecolor[1], self.basecolor[2], self.basecolor[3], self.basecolor[4] = hu.getHUDGaugeColor(indexgag)
-		if self.basecolor[4] <= 64 then
-			self.basecolor[4] = 0
+	function Object_Info_Help:SetStyle()
+
+		if not self.mission_is_going then return end
+
+		--set color
+		local gauge_name = "Directives" --18 --directive gauge --(hudgauges.h)
+		local gauge = hu.getHUDGaugeHandle(gauge_name)
+		self.basecolor[1], self.basecolor[2], self.basecolor[3], self.basecolor[4] = hu.getHUDGaugeColor(gauge_name)
+		--won't turn off, since this info is placed by FREDer and is mission critical
+
+		--set and check font
+		local font
+		local specific_font
+		if self.font_key ~= nil then
+			specific_font = gr.Fonts[self.font_key]
+			if specific_font ~= nil then
+				font = specific_font
+			end
 		end
+		if font == nil then
+			font = gauge:getFont()
+		end
+
+		self.Buffer_Width = 4
+		self.Rect_Line_Width = 2
+		self.Font = font
+		self.Base_width, self.Base_height = gauge:getBaseResolution()
+
 	end
 	
 	--insert object to Object_Info_Help.object_role_list
@@ -111,67 +136,37 @@ $On Game Init: [
 			end
 		end
 	end
-	
+
 	--draws the gauge
 	function Object_Info_Help:Draw()
-		
+
+		--onyl draw if there are entries
 		local drawtext_tbl = self.object_role_list
 		local num_to_draw = #drawtext_tbl
 		if #drawtext_tbl > 0 then 
 			
-			local res_type
-			local buf
-			local rect_linewidth
-			local fonttype
-			
-			local res = {x = gr.getScreenWidth(), y = gr.getScreenHeight()}
-			
-			--if high res
-			if res.x > 3200 then 
-				res_type = 2
-				buf = 8
-				rect_linewidth = 4
-				fonttype = "high_resolution"
-			--if normal res
-			elseif res.x > 1024 then
-				res_type = 1
-				buf = 4
-				rect_linewidth = 2
-				fonttype = "medium_resolution"
-			--then must be low res
-			else
-				res_type = 0
-				buf = 2
-				rect_linewidth = 1
-				fonttype = "low_resolution"
-			end
-			
-			--set and check font
-			local font = self.fonts[fonttype] or 1 --add this 1 in case user remove the option entry somehow 	
-			
-			--if this font doesn't actually exist then find it's closest match
-			local font_conversion = {medium_resolution=1, high_resolution=2, low_resolution=3}
-			if gr.Fonts[font] == nil then 
-				font = font_conversion[fonttype]
-			end 
-			
-			--double check to make sure this exists 
-			--if not then force it to be 1 (we really shouldn't get to this point)
-			if gr.Fonts[font] == nil then 
-				font = 1
-			end
-			
+			--make into locals
+			local buf = self.Buffer_Width
+			local rect_linewidth = self.Rect_Line_Width
+			local font = self.Font
+
 			--now set the font
-			gr.CurrentFont = gr.Fonts[font]
-			
+			gr.CurrentFont = font
+
+			--set screen scale as well
+			local res = {x=self.Base_width, y=self.Base_height}
+			local og_size_mode = gr.CurrentResizeMode
+			gr.setScreenScale(res.x, res.y)
+			gr.CurrentResizeMode = GR_RESIZE_FULL
+
 			--set all dynamicly sized variables
-			
+
 			--get line sizes 
 			local slineh = gr.CurrentFont.Height
 			local lineh_add = slineh*0.2
 			--account for the low resolution situations where the multipliers make a lot of 0s
-			if res_type == 0 then 
-				lineh_add = 4
+			if lineh_add < 1 then 
+				lineh_add = 1
 			end
 
 			local maxwidth_str = 0
@@ -191,80 +186,96 @@ $On Game Init: [
 					maxwidth_str = tstr_width
 				end
 			else 
-				maxwidth_str= gr.getStringWidth(self.maxstring)
+				maxwidth_str = gr.getStringWidth(self.maxstring)
 			end
-			
+
 			local r, g, b, int = self.basecolor[1], self.basecolor[2], self.basecolor[3], self.basecolor[4]
-			
+
+			--up int for labels 
+			local up_int = 50
+			local text_int = int
+			if int >= 0 and int < (255 - up_int) then 
+				text_int = text_int + up_int
+			end
+
 			gr.setColor(r, g, b, int)
 
 			--get size of gauge
 			local size = {
 				x = maxwidth_str + buf*3 + rect_linewidth*2,
-				y = rect_linewidth*2 + buf*4 + (num_to_draw)*(slineh+lineh_add) 
+				y = rect_linewidth*2 + buf*4 + (num_to_draw)*(slineh+slineh*0.4)
 			}
-			
+
 			--update position with user set position arguments
 			local pos_helper = {
 				x = {left = 0, middle = -0.5, right = -1.0},
 				y = {top = 0, middle = - 0.5, bottom = -1.0}
 			}
-			
+
 			--get converted offsets/start position
 			local start_coor = {x=0, y=0}
-			
+
 			for k,v in pairs(start_coor) do			
-				local pos = self.offset[k] + (res[k] * self.origin[k])
+				local pos = self.offset_mission[k] + (res[k] * self.origin_mission[k])
 				local helper_option = self.start_point[k]
 				local helper_x = pos_helper[k][helper_option] or 1
 				start_coor[k] = pos + (helper_x * size[k])
 			end
-			
+
 			local whole_rect = {
 				x1 = start_coor.x,
 				y1 = start_coor.y,
 				x2 = start_coor.x + size.x,
 				y2 = start_coor.y + size.y
 			}
-			
+
 			local header_rect = {
 				x1 = start_coor.x,
 				y1 = start_coor.y,
 				x2 = start_coor.x + size.x,
 				y2 = start_coor.y + slineh*1.4
 			}
-			
+
 			local headerbottom_line = {
 				x1 = start_coor.x,
 				y1 = start_coor.y + slineh*1.4,
 				x2 = start_coor.x + size.x,
 				y2 = start_coor.y + slineh*1.4
-			}		
+			}
 
 			--set to low intensity to draw background of gauge
 			local bckgrdint = 0.3
 			gr.setColor(r, g, b, int*bckgrdint)
 			--draw filled header rectangle
 			gr.drawRectangle(header_rect.x1, header_rect.y1, header_rect.x2, header_rect.y2, true)
-			--set back to reg intensity for outline and text
-			gr.setColor(r, g, b, int)
+			--update intensity for outline
+			gr.setColor(r, g, b, int*0.8)
 			--draw bottom line
 			gr.drawLine(headerbottom_line.x1, headerbottom_line.y1, headerbottom_line.x2, headerbottom_line.y2)
-			--draw title
-			gr.drawString(self.gauge_title, whole_rect.x1 + buf, whole_rect.y1 + buf)
 			--draw main frame
 			gr.setLineWidth(rect_linewidth)
 			gr.drawRectangle(whole_rect.x1, whole_rect.y1, whole_rect.x2, whole_rect.y2, false)	
-			--draw reminder names 
+			--draw title
+			gr.setColor(r, g, b, int)
+
+			local title_pos_x = whole_rect.x1 + buf
+			local title_pos_y = whole_rect.y1 + buf
+			gr.drawString(self.gauge_title, title_pos_x, title_pos_y)
+
+			--draw names
 			local x1 = start_coor.x + buf + rect_linewidth
 			for i,v in ipairs(drawtext_tbl) do
 				local fstr = v.full_string or ""
 				local y1 = headerbottom_line.y1 + buf + (i-1)*(slineh+lineh_add)
 				gr.drawString(fstr, x1, y1)
 			end
-		
+
+			--reset string
+			gr.resetScreenScale()
+			gr.CurrentResizeMode = og_size_mode
+
 		end
-		
+
 	end
 
 	--sexp API for Object_Info_Help:InsertObjectRole(object_name)
@@ -355,23 +366,23 @@ $On Game Init: [
 
 $State: GS_STATE_HUD_CONFIG
 $On State End: [
-	Object_Info_Help:setcolor()
+	Object_Info_Help:SetStyle() --only will update/run if mission is going
 ]
 
 $State: GS_STATE_GAME_PLAY
 $On Gameplay Start: [
-	Object_Info_Help:setcolor()
-	Object_Info_Help:Reset()
+	Object_Info_Help:Reset(true)
+	Object_Info_Help:SetStyle()
 ]
 
 $On HUD Draw: [
-	if hu.HUDDrawn and not hu.HUDDisabledExceptMessages and mn.getMissionTime() > 0.1 and Object_Info_Help.isactive then
+	if Object_Info_Help.isactive and hu.HUDDrawn and not hu.HUDDisabledExceptMessages and MTIME_OVER_P1 then
 		Object_Info_Help:Draw()
 	end
 ]
 
 $On State End: [
-	Object_Info_Help:Reset()
+	Object_Info_Help:Reset(false)
 ]
 
 
