@@ -12,4 +12,28 @@ $Parameter:
 	+Description: Wing name to add to the wings tracked in the custom wingmen gauge.
 	+Type: String
 
+$Operator: wingmen-gauge-remove-wings
+$Category: Change
+$Subcategory: LUA-Action
+$Minimum Arguments: 1
+$Maximum Arguments: 5
+$Return Type: Nothing
+$Description: Removes the specified set of wings from the custom wingmen gauge.
+$Repeat
+$Parameter: 
+	+Description: Wing name to remove from the wings tracked in the custom wingmen gauge.
+	+Type: String
+
+$Operator: wingmen-gauge-add-wings
+$Category: Change
+$Subcategory: LUA-Action
+$Minimum Arguments: 1
+$Maximum Arguments: 5
+$Return Type: Nothing
+$Description: Add the specified set of wings to use in the custom wingmen gauge.
+$Repeat
+$Parameter: 
+	+Description: Wing name to add to the wings tracked in the custom wingmen gauge.
+	+Type: String
+
 #End
