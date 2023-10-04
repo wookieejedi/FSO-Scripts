@@ -920,8 +920,8 @@ $On Game Init: [
 		if #arg <= 0 then return end
 
 		for _, value in ipairs(arg) do
-			if self.winglist[value[1]] ~= nil then
-				self.winglist[value[1]] = nil
+			if CustomWingGauge.winglist[value[1]] ~= nil then
+				CustomWingGauge.winglist[value[1]] = nil
 			end
 		end	
 
@@ -932,7 +932,7 @@ $On Game Init: [
 		if #arg <= 0 then return end
 
 		for _, value in ipairs(arg) do
-			self:AddWing(value[1])
+			CustomWingGauge:AddWing(value[1])
 		end	
 
 	end
