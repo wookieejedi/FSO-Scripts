@@ -181,6 +181,23 @@ $Parameter:
 	+Description: Whether or not to use relative offsets. Default is true, which means all offsets will be relative to the target ship's orientation. To force the use of absolute offsets and not take account the ship's orientation, set to false. Only valid if target is a ship, not a waypoint. 
 	+Type: Boolean
 
+$Operator: pause-waypoint-track-ship
+$Category: Change
+$Subcategory: LUA-Movements
+$Minimum Arguments: 1
+$Maximum Arguments: 3
+$Return Type: Nothing
+$Description: Pauses or unpauses a waypoint tracking of a ship or another waypoint. Note, this sexp only has to be called once. Also, it will not work on player ships in multiplayer. 
+$Parameter: 
+	+Description: Waypoint path containing the waypoint to pause or unpause tracking.
+	+Type: Waypointpath  
+$Parameter: 
+	+Description: Number of the waypoint in the waypoint path. For example, to have the first waypoint position pause or unpause set this value to 1. Default is 1.
+	+Type: Number  
+$Parameter: 
+	+Description: Pause or unpause status. Use true to pause and false to unpause. Default is to unpause (false). 
+	+Type: Boolean 
+
 $Operator: remove-waypoint-track-ship
 $Category: Change
 $Subcategory: LUA-Movements
@@ -301,7 +318,7 @@ $Subcategory: LUA-Movements
 $Minimum Arguments: 3
 $Maximum Arguments: 14
 $Return Type: Nothing
-$Description: Adds a custom ai-goal for a ship to track another ship. The ordered ship will move to follow the target ship and then once stopped will rotate to the target ship orientation, or a variant to that orientation. This is a higher level sexp that runs 'add-waypoint-track-ship' with 'add-ai-goal-track-waypoint' and 'set-idle-track-orientation'. This sexp uses a time interval of 1 second for updating positional data and a track distance of the radius of the ship following the track order. Note, use a waypoint path with only 1 waypoint. The order 'clear-goals' will also stop this custom order. Also the ship will continually maintain the specified orientation when at rest. Note, this sexp only has to be called once. Also, it will not work on player ships in multiplayer. 
+$Description: Adds a custom ai-goal for a ship to track another ship. The ordered ship will move to follow the target ship and then once stopped it will rotate to the target ship orientation, or a variant to that orientation. This is a higher level sexp that runs 'add-waypoint-track-ship' with 'add-ai-goal-track-waypoint' and 'set-idle-track-orientation'. This sexp uses a time interval of 1 second for updating positional data and a track distance of the radius of the ship following the track order. Note, use a waypoint path with only 1 waypoint. The order 'clear-goals' will also stop this custom order. Also the ship will continually maintain the specified orientation when at rest. Note, this sexp only has to be called once. Also, it will not work on player ships in multiplayer. 
 $Parameter: 
 	+Description: Ship to order.
 	+Type: Ship
