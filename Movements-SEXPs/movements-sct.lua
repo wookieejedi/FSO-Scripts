@@ -1,5 +1,5 @@
---Version 3.0, released on August 12, 2025 by wookieejedi
---Requires FSO build of August 22, 2022 or newer
+--Version 3.1, released on August 26, 2025 by wookieejedi
+--Requires FSO build of July 01, 2025 or newer
 --Description: custom sexps and functions that allow for much easier ship movements and rotations
 --Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
 
@@ -33,6 +33,8 @@ Movements.UseDebugMode = false
 		self.G_Time_Check_Interval = 0.1
 		self.Active_Rotations = {}
 		self.Active_Rotations_Sum = 0
+		self.Active_Locations = {}
+		self.Active_Locations_Sum = 0
 		self.Active_Ships_trk_Wpts = {}
 		self.Active_Ships_trk_Wpts_Sum = 0
 		self.Active_Wpts_trk_Objects = {}
@@ -80,6 +82,27 @@ Movements.UseDebugMode = false
 		end
 
 		return output
+
+	end
+
+	function Movements:SmoothStep(t, accel_factor, decel_factor)
+
+		-- Create asymmetric smoothstep using power functions
+		if (t <= 0) then return 0 end
+		if (t >= 1) then return 1 end
+
+		-- Use different powers for acceleration and deceleration phases
+		if (t < 0.5) then
+			-- First half: slow start followed by accelerating
+			local normalized = t * 2 -- Map [0, 0.5] to [0, 1]
+			local eased = math.pow(normalized, accel_factor)
+			return eased * 0.5-- Map back to [0, 0.5]
+		else
+			-- Second half: decelerating to slow end
+			local normalized = (t - 0.5) * 2 -- Map [0.5, 1] to [0, 1]
+			local eased = 1 - math.pow(1 - normalized, decel_factor)
+			return 0.5 + eased * 0.5 -- Map back to [0.5, 1]
+		end
 
 	end
 
@@ -191,6 +214,18 @@ Movements.UseDebugMode = false
 
 	end
 
+	function Movements:Print_XYZ(xyz, optional_name)
+
+		ba.print("Location of "..tostring(optional_name).." is")
+		for i,v in ipairs({"x", "y", "z"}) do
+			local c = ""
+			if i <= 2 then c = "," end
+			ba.print(" "..v..": "..Movements:Round(v, 4)..c)
+		end
+		ba.print(" (in meters) with mission time "..mn.getMissionTime().." \n")
+
+	end
+
 	function Movements:Print_PBH(pbh, optional_name)
 
 		ba.print("Orientation of "..tostring(optional_name).." is")
@@ -278,7 +313,19 @@ Movements.UseDebugMode = false
         
 	end
 
-	function Movements:PBHisValid(pbh_table) --in form {p=,b=h=}
+	function Movements:XYZisValid(xyz_table) --in form {x=, y=, z=}
+
+		if type(xyz_table) == "table" then
+			if type(xyz_table.x) == "number" and type(xyz_table.y) == "number" and type(xyz_table.z) == "number" then
+				return true
+			end
+		end
+
+		return false
+
+	end
+
+	function Movements:PBHisValid(pbh_table) --in form {p=, b=, h=}
 
 		if type(pbh_table) ~= "table" then 
 			--ba.print("Movements Warning: PBH table is not valid...\n")
@@ -309,6 +356,19 @@ Movements.UseDebugMode = false
 			ba.print("Movements Error: input pbh value for function Movements : Normalize PBH() is invalid, returning input...\n")
 			return pbh_to_normalize
 		end
+
+	end
+
+	function Movements:All_XYZ_Values_Within_Threshold(location_1, location_2, threshold) --location and threshold in meters
+
+		if location_1 == nil or location_2 == nil then 
+			print("Movements Error: XYZ values are invalid for function that checks if they are withing a threshold. \n")
+			return false 
+		end
+
+		threshold = threshold or 0.01
+
+		return self:Get_Distance_Linear(location_1, {location_2.x, location_2.y, location_2.z}, true) < threshold
 
 	end
 
@@ -431,6 +491,51 @@ Movements.UseDebugMode = false
 
 	end
 
+	function Movements:GetFinal_XYZ(ship, final_input_xyz, objecttarget_name, is_relative) --final_input_xyz in {x=,y=,z=}
+
+		if ship == nil then return nil end 
+		if not ship:isValid() then return nil end
+		if not self:XYZisValid(final_input_xyz) then return nil end
+
+		--if no target object set then return input
+		--if target object is set and it isn't present then return nil to avoid moving to something that is not present
+		--  ie has to be separate return checks to avoid case where there is a target object defined but it is not present
+		--  it would use the relative coordinates without the target ship
+		if type(objecttarget_name) ~= "string" then
+			return {x = final_input_xyz.x, y = final_input_xyz.y, z = final_input_xyz.z}
+		end
+
+		--if target object corresponds to a ship in mission 
+		--at this point already know target object is a string
+		local target_object = self:Get_Ship_or_Wpt_Obj_from_Name(objecttarget_name)
+
+		--if target object does not correspond to ship in mission (ie not arrived or dod) then don't do anything
+		if target_object == nil then return end
+		if not target_object:isValid() then return nil end
+
+		--if target valid check which type of final xyz is needed
+		local target_loc = target_object.Position
+		if target_loc == nil then
+			return nil 
+		end
+
+		if is_relative then 
+			local new_vec = target_loc + target_object.Orientation:unrotateVector(ba.createVector(final_input_xyz.x, final_input_xyz.y, final_input_xyz.z))
+			return {
+				x = new_vec.x, 
+				y = new_vec.y, 
+				z = new_vec.z
+			}
+		else
+			return {
+				x = final_input_xyz.x + target_loc.x, 
+				y = final_input_xyz.y + target_loc.y, 
+				z = final_input_xyz.z + target_loc.z
+			}
+		end
+
+	end
+
 	function Movements:GetFinal_PBH(ship, final_input_pbh, objecttarget_name, special_override_id) --final_input_pbh in {p=,b=,h=}
 
 		if ship == nil then return nil end 
@@ -440,7 +545,7 @@ Movements.UseDebugMode = false
 		--if no target object set then return input
 		--if target object is set and it isn't present then return nil to avoid rotating to something that is not present
 		--  ie has to be separate return checks to avoid case where there is a target object defined but it is not present
-		--  it would use the relative coordinates without the target ship)
+		--  it would use the relative coordinates without the target ship
 		if type(objecttarget_name) ~= "string" then
 			return {p = final_input_pbh.p, b = final_input_pbh.b, h = final_input_pbh.h}
 		end
@@ -954,6 +1059,280 @@ Movements.UseDebugMode = false
 	end
 
 
+	function Movements:Add_LocationMove(shipname, final_xyz, options_table) --requires xyz table in meters with {x=,y=,z=}
+
+		--validity checks
+		if not self.is_enabled then return end
+		if shipname == nil then return end
+		local ship = mn.Ships[shipname]
+		if ship == nil then return end
+		if not ship:isValid() then return end
+
+		if type(options_table) ~= "table" then
+			options_table = {}
+		end
+
+		local time_delay = options_table.SL_IN_time_delay
+		local time_for_location = options_table.SL_IN_location_time
+		local play_dead_PR = options_table.SL_IN_play_dead_PR
+		local targetobject_name = options_table.SL_IN_final_xyz_target_name
+		local accel_value = options_table.SL_IN_acceleration_value
+		local decel_value = options_table.SL_IN_deceleration_value
+		local engine_dependent = options_table.SL_IN_requires_engines
+
+		--only continue if engines are not blown out
+		if engine_dependent and self:GenericSubsystem_HitsPercent(ship, "engine") <= 0 then
+			return
+		end
+
+		if not self:XYZisValid(final_xyz) then
+			ba.print("Movements SEXP Warning: Add LocationMove() provided with invalid final_xyz, not running move to location...\n")
+			return 
+		end
+
+
+		--default value setting
+
+		if type(accel_value) == "number" then
+			if accel_value < 0 then
+				accel_value = 1
+			end
+		else
+			accel_value = 1
+		end
+		if type(decel_value) == "number" then
+			if decel_value < 0 then
+				decel_value = 1
+			end
+		else
+			decel_value = 1
+		end
+
+		--set play dead order if needed, default is disabled
+		--negative value turns off play dead order
+		if type(play_dead_PR) ~= "number" then
+			play_dead_PR = -1
+		end
+
+		--cap at 200 to avoid errors too, recall there is no floor
+		if play_dead_PR > 200 then
+			play_dead_PR = 200 
+		end
+
+		--set times and keep everything positive
+		--all times in seconds from sexp		
+		local current_time = mn.getMissionTime()
+		if type(time_delay) ~= "number" then
+			time_delay = 0
+		end
+		if time_delay < 0 then
+			time_delay = 0
+		end
+
+		--negative number runs default estimated tabled speed
+		if type(time_for_location) ~= "number" then
+			local distance_to_move = self:Get_Distance_Linear(ship.Position, {final_xyz.x, final_xyz.y, final_xyz.z}, true)
+			local max_vel = ship.Physics.VelocityMax[3] or 1
+			time_for_location = (distance_to_move / max_vel) * 2 --for acceleration and deceleration 
+		end
+		
+		if time_for_location < 0 then 
+			time_for_location = 0
+		end
+
+		--set times, and double check default determined time for location move
+		local start_time = time_delay + current_time
+
+		local end_time = start_time + time_for_location
+
+		--add entry using ship name as key and update total number variable
+		local entry = {
+			LR_OUT_shipname = shipname, 
+			LR_OUT_FSO_location_initial = {}, --recall this cleared/set when location starts to
+			LR_OUT_final_xyz_table = {x = final_xyz.x, y = final_xyz.y, z = final_xyz.z}, --this is the base final pbh we never want to change
+			LR_OUT_FSO_location_final_updated = {}, --this adds the target's location and can change, is set when location move starts
+			LR_OUT_start_time = start_time, 
+			LR_OUT_end_time = end_time, -- -1 if using ai time
+			LR_OUT_play_dead_PR = play_dead_PR,
+			LR_OUT_ismoving = false,
+			LR_OUT_final_xyz_target_name = targetobject_name,
+			LR_OUT_final_xyz_is_relative = options_table.SL_IN_final_xyz_is_relative,
+			LR_OUT_acceleration_value = accel_value,
+			LR_OUT_deceleration_value = decel_value
+		}
+
+		--remove any other active location moves for this ship
+		self:Remove_LocationMove(shipname, true)
+
+		self.Active_Locations_Sum = self.Active_Locations_Sum + 1
+
+		self.Active_Locations[shipname] = entry
+
+	end
+
+	function Movements:Remove_LocationMove(shipname_key, print_premature)
+
+		if not self.is_enabled then return end
+		if shipname_key == nil then return end
+		local entry = self.Active_Locations[shipname_key]
+
+		--remove any play dead orders, remove from table and update tracker totals
+		if entry ~= nil then
+
+			--remove play dead order if it was using one
+			if entry.LR_OUT_play_dead_PR >= 0 then 
+				self:RemoveGoal_Correctly(mn.Ships[entry.LR_OUT_shipname], entry.LR_OUT_play_dead_PR, "ai-play-dead-persistent")
+			end
+
+			if print_premature then
+				ba.print("Movements: move to location for ship "..shipname_key.." is being prematurely removed ...\n")
+			end
+
+			--set to nil and update tracker variables
+			self.Active_Locations[shipname_key] = nil
+			self.Active_Locations_Sum = self.Active_Locations_Sum - 1
+
+		end
+
+	end
+
+	function Movements:Run_LocationMove()
+
+		local mtime = mn.getMissionTime()
+
+		--goes through list and rotates each entry based on time
+		for _, v in pairs(self.Active_Locations) do
+
+			--only check and run if start time has come
+			if mtime >= v.LR_OUT_start_time and v.LR_OUT_shipname ~= nil then
+				--note: using both force stop and no chop doesn't improve final pbh matching any better
+
+				local ship = mn.Ships[v.LR_OUT_shipname]
+				if ship ~= nil and ship:isValid() then
+
+					--overall, we should start the location move if it has not started or continue it if it has started
+
+					local percent_done_og = (mtime - v.LR_OUT_start_time) / (v.LR_OUT_end_time - v.LR_OUT_start_time)
+					local ship_loc = ship.Position
+
+					--specified time
+					local percent_done = self:SmoothStep(percent_done_og, v.LR_OUT_acceleration_value, v.LR_OUT_deceleration_value)
+
+					if percent_done < 0 then
+						percent_done = 0
+					end
+
+
+					if percent_done <= 1 then
+
+						local continue_with_location = true
+
+						--if ship location move has not started then check and start it (runs once to setup)
+						--this mitigates issues with delayed starts
+						if not v.LR_OUT_ismoving then
+
+							--if we specified a final target name then check which type of location move (relative to target or absolute)
+
+							local xyz_final = self:GetFinal_XYZ(ship, v.LR_OUT_final_xyz_table, v.LR_OUT_final_xyz_target_name, v.LR_OUT_final_xyz_is_relative)
+
+							--^ will return pbh if no target object set
+							--^ will be nil if target object_name is set but not in mission
+
+							if xyz_final ~= nil then
+								--update initial location with ships current location
+								v.LR_OUT_FSO_location_initial = nil
+								v.LR_OUT_FSO_location_initial = ba.createVector(ship_loc.x, ship_loc.y, ship_loc.z)
+
+								--save whole location now
+								v.LR_OUT_FSO_location_final_updated = nil
+								v.LR_OUT_FSO_location_final_updated = ba.createVector(xyz_final.x, xyz_final.y, xyz_final.z)
+
+								--run play dead if needed (ie not negative value)
+								if v.LR_OUT_play_dead_PR >= 0 then
+									ship:giveOrder(ORDER_PLAY_DEAD_PERSISTENT, nil, nil, v.LR_OUT_play_dead_PR/100)
+								end
+
+								--finally, set that the ship is moving
+								v.LR_OUT_ismoving = true
+
+							else
+								--if the target object was set but is not in mission then we don't need to move and we can set to nil 
+								continue_with_location = false
+								self:Remove_LocationMove(v.LR_OUT_shipname)
+							end
+
+						--else --already moving so continue moving
+						end
+
+						if continue_with_location then
+							ship.Position = v.LR_OUT_FSO_location_initial:getInterpolated(v.LR_OUT_FSO_location_final_updated, percent_done)
+						end
+
+					else --if more then percent done, then remove from list
+						--set ship location to final (in theory that should already be done)
+						--setting may cause a jerking motion if the off chance the preceding location didn't work, 
+						--or if the ship was moving and thus had moved past final location
+						--but the threshold is so small that jerkiness is not really visible (unless moving!), 
+						--plus it prevents off-location build up builds with continual use
+						if ship.Physics:getForwardSpeed() < 0.1 then
+							local orders = ship.Orders or {}
+							if #orders <= 0 then
+								ship.Position = v.LR_OUT_FSO_location_final_updated
+							end
+						end
+
+						--set just for consistency, technically it gets removed in the next function anyway
+						v.LR_OUT_ismoving = false
+
+						--remove and update total variable
+						--  self:Print_XYZ(ship.Position, "Movements: "..ship.Name.." XYZ after being done with location move order")
+						--  self:Print_XYZ(v.LR_OUT_FSO_location_final_updated, "Movements: "..ship.Name.." XYZ should be")
+						self:Remove_LocationMove(v.LR_OUT_shipname)
+					end
+
+				end
+
+			end
+
+		end
+
+	end
+
+	mn.LuaSEXPs["move-to-location"].Action = function(ship, final_x, final_y, final_z, time_start_delay, time_for_effect, play_dead_priority, accel_val, decel_val)
+
+		if ship ~= nil and ship:isValid() then
+
+			local final_xyz = {x=final_x, y=final_y, z=final_z}
+			if not Movements:XYZisValid(final_xyz) then 
+				ba.print("Movements SEXP Warning: move-to-location sexp provided with invalid final_xyz, not running move to location...\n")
+				return 
+			end
+
+			--add entry
+			--number checks are completed in function below 
+			local input_tbl = {
+				SL_IN_time_delay = time_start_delay,
+				SL_IN_movement_time = time_for_effect,
+				SL_IN_play_dead_PR = play_dead_priority,
+				SL_IN_final_xyz_target_name = nil,
+				SL_IN_final_xyz_is_relative = false,
+				SL_IN_acceleration_value = accel_val,
+				SL_IN_deceleration_value = decel_val
+			}
+			Movements:Add_LocationMove(ship.Name, final_xyz, input_tbl)
+		end
+
+	end
+
+	mn.LuaSEXPs["early-stop-move-to-location"].Action = function(ship)
+
+		if ship ~= nil and ship:isValid() then
+			Movements:Remove_LocationMove(ship.Name, true)
+		end
+
+	end
+
+
 	function Movements:Add_Rotation(shipname, final_pbh, options_table) --requires pbh table in radians with {p=,b=,h=}
 
 		--validity checks
@@ -972,9 +1351,10 @@ Movements.UseDebugMode = false
 		local play_dead_PR = options_table.SR_IN_play_dead_PR
 		local targetobject_name = options_table.SR_IN_final_pbh_target_name
 		local special_override_final_pbh = options_table.SR_IN_final_pbh_special_override
+		local engine_dependent = options_table.SR_IN_requires_engines
 
 		--only continue if engines are not blown out
-		if self:GenericSubsystem_HitsPercent(ship, "engine") <= 0 then
+		if engine_dependent and self:GenericSubsystem_HitsPercent(ship, "engine") <= 0 then
 			return
 		end
 
@@ -1182,11 +1562,11 @@ Movements.UseDebugMode = false
 						--setting may cause a jerking motion if the off chance the preceding rotation didn't work, 
 						--or if the ship was moving and thus had moved past final orientation
 						--but the threshold is so small that jerkiness is not really visible (unless moving!), 
-						--plus it prevents off-rotation build up bugs with continuous PBH checks
+						--plus it prevents off-rotation build up builds with continuous PBH checks
 						if ship.Physics:getForwardSpeed() < 0.1 then
 							local orders = ship.Orders or {}
 							if #orders <= 0 then
-								ship.Orientation = v.SR_OUT_FSO_orientation_initial:rotationalInterpolate(v.SR_OUT_FSO_orientation_final_updated, 1.0)
+								ship.Orientation = v.SR_OUT_FSO_orientation_final_updated
 							end
 						end
 
@@ -1873,11 +2253,19 @@ Movements.UseDebugMode = false
 
 	end
 
-	function Movements:Update_Custom_Ship_PausedWaypoint(shipname, status, i_list)
+	function Movements:Update_Custom_Ship_PausedWaypoint(shipname, status, i_list, run_rotation_remove)
+
+		--adds to list of paused overrides, 
+		--  if on either list then the ship will always be in pause mode
+		--even if the ship entry in the waypoint_track list is not in pause mode
 
 		if shipname ~= nil then
 
 			self:Reset_Track_Waypoint_Time(shipname)
+
+			if run_rotation_remove then
+				self:Remove_Rotation(shipname)
+			end
 
 			if i_list == 1 then
 				self.Ships_Waypoints_Paused1_List[shipname] = status
@@ -1969,6 +2357,7 @@ Movements.UseDebugMode = false
 				SR_IN_play_dead_PR = entry.StW_OUT_play_dead_PR,
 				SR_IN_final_pbh_target_name = entry.StW_OUT_final_pbh_target_name,
 				SR_IN_final_pbh_special_override = entry.StW_OUT_final_pbh_override,
+				SR_IN_requires_engines = true
 			}
 
 			--recall add rotation will create the final orientation once timer is triggered, 
@@ -2127,8 +2516,10 @@ Movements.UseDebugMode = false
 									end
 
 								else
-
-									check_run_pbh = true
+									--recall the obstacle check used above internal has the 'check custom paused' check
+									if not self:Get_Custom_Ship_PausedWaypoint(ship) then  
+										check_run_pbh = true
+									end
 
 								end
 
@@ -2146,7 +2537,6 @@ Movements.UseDebugMode = false
 										local fo = self:GetFinal_PBH(ship, v.StW_OUT_final_pbh_table, v.StW_OUT_final_pbh_target_name, v.StW_OUT_final_pbh_override) 
 
 										if fo ~= nil and not self:All_PBH_Values_Within_Threshold(ship.Orientation, fo, 0.02) then --0.02 radians = 1.15 degrees
-											print("ZZZ PBH different, running rotate to orientation \n")
 											--orientations are not equal, so add rotation order
 											local input_tbl = {
 												SR_IN_time_delay = self:Time_Until_Stop(v.StW_OUT_shipname) * 1.5, --let On Waypoints Done rotation trigger first
@@ -2154,6 +2544,7 @@ Movements.UseDebugMode = false
 												SR_IN_play_dead_PR = v.StW_OUT_play_dead_PR,
 												SR_IN_final_pbh_target_name = v.StW_OUT_final_pbh_target_name,
 												SR_IN_final_pbh_special_override = v.StW_OUT_final_pbh_override,
+												SR_IN_requires_engines = true
 											}
 
 											--recall add rotation will create the final orientation once timer is triggered, 
@@ -2195,10 +2586,12 @@ Movements.UseDebugMode = false
 
 	end
 
-	function Movements:Set_Waypoint_Pause_Trigger(shipname, trigger_boolean)
+	function Movements:Set_Waypoint_Pause_Trigger(shipname, trigger_boolean, run_rotation_remove)
 
-		--setting to true will pause movements along a waypoint, regardless of whether using smart stop or not
-		--setting to false will just let the waypoint logic go back to normal
+		--setting to true will pause movements along a waypoint, 
+		--  regardless of whether using smart stop or not
+		--setting to false will just let the waypoint logic go back to normal, 
+		--  assuming the ship is not also on the custom pause lists
 
 		if not self.is_enabled then return end
 		if shipname == nil then return end
@@ -2207,14 +2600,17 @@ Movements.UseDebugMode = false
 		if entry ~= nil then
 			entry.StW_OUT_wp_pause_triggered = trigger_boolean
 			self:Reset_Track_Waypoint_Time(shipname)
+			if run_rotation_remove then
+				self:Remove_Rotation(shipname)
+			end
 		end
 
 	end
 
-	mn.LuaSEXPs["pause-ai-goal-track-waypoint"].Action = function(ship, trigger_bool)
+	mn.LuaSEXPs["pause-ai-goal-track-waypoint"].Action = function(ship, trigger_bool, stop_any_rotations)
 
 		if ship ~= nil and ship:isValid() then
-			Movements:Set_Waypoint_Pause_Trigger(ship.Name, trigger_bool)
+			Movements:Set_Waypoint_Pause_Trigger(ship.Name, trigger_bool, stop_any_rotations)
 		end
 
 	end
@@ -2559,6 +2955,10 @@ Movements.UseDebugMode = false
 			if self.Active_Rotations_Sum > 0 then
 				self:Run_Rotation()
 			end
+			--update locations --now done on Simulation
+			if self.Active_Locations_Sum > 0 then
+				self:Run_LocationMove()
+			end
 			--update current time and check waypoints
 			if current_time > self.Time_Previous_Check + self.G_Time_Check_Interval then
 				self.Time_Previous_Check = current_time
@@ -2680,6 +3080,7 @@ Movements.UseDebugMode = false
 			if hook_ship ~= nil and hook_ship:isValid() then
 				local shipname = hook_ship.Name
 				Movements:Remove_Rotation(shipname, true)
+				Movements:Remove_LocationMove(shipname, true)
 				Movements:Remove_Ship_Track_Waypoint(shipname)
 			end
 		end		
