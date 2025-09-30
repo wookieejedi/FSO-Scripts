@@ -1,4 +1,4 @@
---Version 3.1, released on August 26, 2025 by wookieejedi
+--Version 3.2, released on September 30, 2025 by wookieejedi
 --Requires FSO build of July 01, 2025 or newer
 --Description: custom sexps and functions that allow for much easier ship movements and rotations
 --Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
@@ -172,20 +172,20 @@ Movements.UseDebugMode = false
 		local norm_diff = position_diff:getNormalized()
 
 		--get normalized fvec of ship
-			--v1 = origin_obj_p->orient.vec.fvec;	--get fvec of me
-			--vm_vec_normalize(&v1);	--normalize fvec of me
+		--  v1 = origin_obj_p->orient.vec.fvec;	--get fvec of me
+		--  vm_vec_normalize(&v1);	--normalize fvec of me
 		local ship_fvec_norm = ship:getfvec(true) --[boolean normalize]
 
 		--get dot and cos
-			--a1 = vm_vec_dot(&v1, &v2); --dot product v1(me) v2(target) --(v1->xyz.x*v0->xyz.x)+(v1->xyz.y*v0->xyz.y)+(v1->xyz.z*v0->xyz.z);
-			--a2 = cos_f(fl_radians(angle % 360));
+		--  a1 = vm_vec_dot(&v1, &v2); --dot product v1(me) v2(target) --(v1->xyz.x*v0->xyz.x)+(v1->xyz.y*v0->xyz.y)+(v1->xyz.z*v0->xyz.z);
+		--  a2 = cos_f(fl_radians(angle % 360));
 		local angle_1 = ship_fvec_norm:getDotProduct(norm_diff)
 		local angle_2 = math.cos(angle_threshold)
 
 		--compare
-			--if (a1 >= a2)
-				--return SEXP_TRUE;
-			--else SEXP_FALSE
+		--  if (a1 >= a2)
+		--     return SEXP_TRUE;
+		--  else return SEXP_FALSE;
 		if angle_1 >= angle_2 then
 			return true
 		else
@@ -640,9 +640,9 @@ Movements.UseDebugMode = false
 	function Movements:Set_Obj1_Pos_Relative_to_Obj2(obj1_to_set_name, obj2_relative_name, offset_tbl, is_relative_to_obj2_pbh) --offset_tbl in form {0, 0, 0}
 
 		local object_to_set = self:Get_Ship_or_Wpt_Obj_from_Name(obj1_to_set_name)
-		local relative_target = self:Get_Ship_or_Wpt_Obj_from_Name(obj2_relative_name)
+		local source_target = self:Get_Ship_or_Wpt_Obj_from_Name(obj2_relative_name)
 
-		if object_to_set == nil or relative_target == nil then 
+		if object_to_set == nil or source_target == nil then 
 			return 
 		end
 
@@ -655,9 +655,9 @@ Movements.UseDebugMode = false
 
 		local new_vec
 		if is_relative_to_obj2_pbh then
-			new_vec = relative_target.Position + relative_target.Orientation:unrotateVector(ba.createVector(offset[1], offset[2], offset[3]))
+			new_vec = source_target.Position + source_target.Orientation:unrotateVector(ba.createVector(offset[1], offset[2], offset[3]))
 		else
-			new_vec = ba.createVector(relative_target.Position[1] + offset[1], relative_target.Position[2] + offset[2], relative_target.Position[3] + offset[3])
+			new_vec = ba.createVector(source_target.Position[1] + offset[1], source_target.Position[2] + offset[2], source_target.Position[3] + offset[3])
 		end
 
 		object_to_set.Position = ba.createVector(new_vec[1], new_vec[2], new_vec[3])
@@ -1073,7 +1073,7 @@ Movements.UseDebugMode = false
 		end
 
 		local time_delay = options_table.SL_IN_time_delay
-		local time_for_location = options_table.SL_IN_location_time
+		local time_for_location = options_table.SL_IN_movement_time
 		local play_dead_PR = options_table.SL_IN_play_dead_PR
 		local targetobject_name = options_table.SL_IN_final_xyz_target_name
 		local accel_value = options_table.SL_IN_acceleration_value
@@ -1135,7 +1135,7 @@ Movements.UseDebugMode = false
 			local max_vel = ship.Physics.VelocityMax[3] or 1
 			time_for_location = (distance_to_move / max_vel) * 2 --for acceleration and deceleration 
 		end
-		
+
 		if time_for_location < 0 then 
 			time_for_location = 0
 		end
@@ -1152,7 +1152,7 @@ Movements.UseDebugMode = false
 			LR_OUT_final_xyz_table = {x = final_xyz.x, y = final_xyz.y, z = final_xyz.z}, --this is the base final pbh we never want to change
 			LR_OUT_FSO_location_final_updated = {}, --this adds the target's location and can change, is set when location move starts
 			LR_OUT_start_time = start_time, 
-			LR_OUT_end_time = end_time, -- -1 if using ai time
+			LR_OUT_end_time = end_time,
 			LR_OUT_play_dead_PR = play_dead_PR,
 			LR_OUT_ismoving = false,
 			LR_OUT_final_xyz_target_name = targetobject_name,
