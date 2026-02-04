@@ -1,4 +1,4 @@
---Version 3.3, released on December 17, 2025 by wookieejedi
+--Version 3.4, released on February 04, 2026 by wookieejedi
 --Requires FSO build of July 01, 2025 or newer
 --Description: custom sexps and functions that allow for much easier ship movements and rotations
 --Usage: custom sexps are included and listed in FRED under the LUA-Movements tab
@@ -3337,4 +3337,5 @@ Movements.UseDebugMode = false
 			{State="GS_STATE_GAME_PLAY"}
 		)
 	end
+
 
